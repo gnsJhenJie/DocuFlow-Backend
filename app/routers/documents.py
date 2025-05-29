@@ -9,6 +9,7 @@ from app.schemas.document import DocumentCreate, DocumentRead, DocumentUpdate
 from app.schemas.history import HistoryEntry
 from app.core.security import get_current_user, require_role
 from app.services.s3 import upload_image
+from app.services.cloudfront import generate_signed_url
 from app.core.config import settings
 from datetime import datetime, timezone
 
@@ -26,7 +27,7 @@ def paginate(query, page:int, limit:int):
 def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     # create draft or submit
     doc = Document(
-        title=data.title, content=data.content, image_url=data.imageUrl,
+        title=data.title, content=data.content, image_url=_process_image_url_to_path(data.imageUrl),
         author_id=user.id, author_name=user.name,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -84,6 +85,12 @@ def list_documents(
         col = getattr(Document, 'updated_at' if field=='updatedAt' else field)
         query = query.order_by(col.desc() if order=='desc' else col.asc())
     items, pages = paginate(query, page, limit)
+    # Convert image URLs to signed URLs if needed
+    for item in items:
+        if item.image_url:
+            item.image_url = generate_signed_url(item.image_url, expire_in_seconds=600)
+            print(f"Generated signed URL for {item.image_url}")
+    
     return {"documents": items, "totalPages": pages, "currentPage": page}
 
 @router.get("/{document_id}", response_model=DocumentRead)
@@ -108,7 +115,7 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session=Depends(
         doc.status=ReviewStatus.draft
     if data.title: doc.title = data.title
     if data.content: doc.content = data.content
-    if data.imageUrl: doc.image_url = data.imageUrl
+    if data.imageUrl: doc.image_url = _process_image_url_to_path(data.imageUrl)
     doc.updated_at = datetime.now(timezone.utc)
     if data.action=='resubmit_for_review':
         if not data.reviewerId: raise HTTPException(400)
@@ -171,5 +178,21 @@ upload_router = APIRouter(prefix="/api", tags=["images"])
 
 @upload_router.post("/upload")
 async def upload_endpoint(file: UploadFile = File(...)):
-    url = await upload_image(file)
+    key = await upload_image(file)
+    url = generate_signed_url(key, expire_in_seconds=600)
     return {"imageUrl": url}
+
+def _process_image_url_to_path(image_url: str|None) -> str| None:
+    """
+    Process the image URL to S3 path without bucket name.
+    """
+    if not image_url:
+        return None
+    if image_url.startswith("https://"):
+        image_url = image_url.replace("https://", "")
+        # Get the path after the domain
+        if "/" in image_url:
+            image_url = image_url.split("/", 1)[1]
+        if "?" in image_url: # Remove query parameters if present
+            image_url = image_url.split("?")[0]
+    return image_url
