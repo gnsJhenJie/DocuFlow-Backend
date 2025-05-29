@@ -27,7 +27,9 @@ def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=De
     # create draft or submit
     doc = Document(
         title=data.title, content=data.content, image_url=data.imageUrl,
-        author_id=user.id, author_name=user.name
+        author_id=user.id, author_name=user.name,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     if data.action == 'submit_for_review':
         if not data.reviewerId:
