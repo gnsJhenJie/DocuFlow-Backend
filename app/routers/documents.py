@@ -33,7 +33,7 @@ def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=De
         if not data.reviewerId:
             raise HTTPException(400, "reviewerId required for submit")
         rev = db.query(User).get(data.reviewerId)
-        if not rev or rev.role not in [User.role.property.columns[0].type.enum_member('reviewer'), User.role.property.columns[0].type.enum_member('admin')]:
+        if not rev or rev.role not in [Role.reviewer, Role.admin]:
             raise HTTPException(400, "Invalid reviewer")
         doc.status = ReviewStatus.pending_review
         doc.reviewer_id = rev.id
@@ -64,7 +64,7 @@ def list_documents(
 ):
     query = db.query(Document)
     # RBAC filtering
-    if user.role == User.role.property.columns[0].type.enum_member('viewer'):
+    if user.role == Role.viewer:
         query = query.filter(Document.status==ReviewStatus.approved)
     if authorId:
         query = query.filter(Document.author_id==authorId)
