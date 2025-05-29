@@ -10,7 +10,7 @@ from app.schemas.history import HistoryEntry
 from app.core.security import get_current_user, require_role
 from app.services.s3 import upload_image
 from app.core.config import settings
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -38,7 +38,7 @@ def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=De
         doc.status = ReviewStatus.pending_review
         doc.reviewer_id = rev.id
         doc.reviewer_name = rev.name
-        doc.submitted_at = datetime.utcnow()
+        doc.submitted_at = datetime.now(timezone.utc)
     db.add(doc)
     db.commit()
     db.refresh(doc)
@@ -107,7 +107,7 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session=Depends(
     if data.title: doc.title = data.title
     if data.content: doc.content = data.content
     if data.imageUrl: doc.image_url = data.imageUrl
-    doc.updated_at = datetime.utcnow()
+    doc.updated_at = datetime.now(timezone.utc)
     if data.action=='resubmit_for_review':
         if not data.reviewerId: raise HTTPException(400)
         rev=db.query(User).get(data.reviewerId)
