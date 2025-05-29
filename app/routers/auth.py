@@ -21,19 +21,6 @@ class OAuthCallbackRequest(BaseModel):
 # --------------- Google OAuth ---------------
 
 @router.get("/google/url")
-# def google_oauth_url():
-#     """
-#     回傳 Google OAuth2 授權 URL，前端 redirect 到這個 URL 進行 Google 登入。
-#     """
-#     redirect_uri = f"{settings.FRONTEND_URL}/auth/callback"
-#     url = (
-#         "https://accounts.google.com/o/oauth2/v2/auth?"
-#         f"client_id={settings.GOOGLE_CLIENT_ID}&"
-#         "response_type=code&"
-#         "scope=openid%20email%20profile&"
-#         f"redirect_uri={redirect_uri}"
-#     )
-#     return {"url": url}
 def google_oauth_url():
     client_config = {
         "web": {
@@ -65,57 +52,6 @@ def google_oauth_url():
 
 
 @router.post("/google/callback", response_model=Token)
-# async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(get_db)):
-#     """
-#     前端用拿到的 `code` 呼叫此 API，以交換 Google id_token、再簽發我們的 JWT。
-#     回傳 { token, user }。
-#     """
-#     code = payload.code
-#     # 1. 交換 Google token
-#     resp = httpx.post(
-#         "https://oauth2.googleapis.com/token",
-#         data={
-#             "code": code,
-#             "client_id": settings.GOOGLE_CLIENT_ID,
-#             "client_secret": settings.GOOGLE_CLIENT_SECRET,
-#             "redirect_uri": f"{settings.FRONTEND_URL}/auth/callback",
-#             "grant_type": "authorization_code",
-#         },
-#     )
-#     data = resp.json()
-
-#     print(resp.status_code, data)
-#     if resp.status_code != 200:
-#         raise HTTPException(status_code=resp.status_code, detail="Google token exchange failed")
-#     id_token = data.get("id_token")
-#     if not id_token:
-#         raise HTTPException(status_code=400, detail="Google token exchange failed")
-
-#     # 2. 解碼並取 email + name
-#     info = jwt.decode(id_token, key="", audience=settings.GOOGLE_CLIENT_ID, options={"verify_signature": False})
-#     email = info.get("email")
-#     name = info.get("name")
-#     print(name, email)
-#     if not email:
-#         raise HTTPException(status_code=400, detail="Email not returned by Google")
-
-#     # 3. 查詢或建立本地使用者
-#     user = db.query(User).filter(User.email == email).first()
-#     if not user:
-#         # 隨機雜湊一個密碼，真正登入只透過 OAuth
-#         user = User(
-#             email=email,
-#             name=name,
-#             hashed_password=get_password_hash(email + settings.JWT_SECRET_KEY),
-#             role=Role.viewer,
-#         )
-#         db.add(user)
-#         db.commit()
-#         db.refresh(user)
-
-#     # 4. 金鑰簽發我們的 JWT
-#     token = create_access_token({"sub": user.id, "role": user.role.value})
-#     return {"token": token, "user": user}
 async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(get_db)):
     """
     1. 用 google-auth-oauthlib 交換 `code` → Credentials  
@@ -185,7 +121,7 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
         db.refresh(user)
 
     # ---------- 4. 簽發我們自己的 JWT ----------
-    token = create_access_token({"sub": user.id, "role": user.role.value})
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return {"token": token, "user": user}
 
 @router.post("/register", response_model=Token)
