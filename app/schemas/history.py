@@ -4,10 +4,10 @@ from datetime import datetime
 
 class HistoryEntry(BaseModel):
     id: int
-    timestamp: datetime
+    document_id: int
     action: str
-    userId: int
-    userName: str
-    details: Optional[Dict[str, Any]]
+    actor_id: int
+    timestamp: datetime
+    details: Optional[str]
     class Config:
         orm_mode = True
