@@ -6,7 +6,8 @@ class HistoryEntry(BaseModel):
     id: int
     document_id: int
     action: str
-    actor_id: int
+    userId:   int   
+    userName: str   
     timestamp: datetime
     details: Optional[str]
     class Config:
