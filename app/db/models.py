@@ -16,6 +16,7 @@ class ReviewStatus(str, enum.Enum):
     pending_review = "pending_review"
     approved = "approved"
     rejected = "rejected"
+    deleted = "deleted"
 
 class User(Base):
     __tablename__ = "users"

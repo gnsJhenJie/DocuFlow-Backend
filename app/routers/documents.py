@@ -68,6 +68,7 @@ def list_documents(
     user=Depends(get_current_user)
 ):
     query = db.query(Document)
+    query = query.filter(Document.status != ReviewStatus.deleted)  # Exclude soft-deleted documents
     # RBAC filtering
     if user.role == Role.admin:
         pass
@@ -174,10 +175,22 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session=Depends(
 def delete_document(document_id:int, db:Session=Depends(get_db), user=Depends(get_current_user)):
     doc=db.query(Document).get(document_id)
     if not doc: raise HTTPException(404)
-    if doc.status!=ReviewStatus.draft or (doc.author_id!=user.id and user.role!=Role.admin):
-        raise HTTPException(403)
-    db.delete(doc); db.commit()
-    return {"message":"Deleted"}
+    allow = False
+    
+    if user.role!=Role.viewer:
+        if user.role==Role.admin and doc.status==ReviewStatus.approved:
+            # admin can delete approved documents
+            allow = True
+        elif doc.author_id==user.id and doc.status not in [ReviewStatus.approved, ReviewStatus.pending_review]:
+            # author can delete drafts or rejected documents
+            allow = True
+    
+    if not allow:
+        raise HTTPException(403, "You do not have permission to delete this document!")
+   
+    doc.status = ReviewStatus.deleted
+    db.commit()
+    return {"message":"Document soft-deleted"}
 
 @router.post("/{document_id}/approve", response_model=DocumentRead)
 def approve(document_id:int, db:Session=Depends(get_db), user=Depends(require_role(Role.reviewer, Role.admin))):
