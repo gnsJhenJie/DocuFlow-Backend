@@ -2,11 +2,7 @@ name: Python Dependency Audit (pip-audit)
 
 on:
   push:
-    paths:
-      - '**/requirements*.txt'
-  pull_request:
-    paths:
-      - '**/requirements*.txt'
+    branches: [main]
 
 jobs:
   audit:

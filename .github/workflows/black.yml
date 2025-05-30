@@ -1,46 +1,37 @@
-name: Auto-format Python with Black
+name: Auto-format Python on PR
 
 on:
-  push:
-    branches: [main]
   pull_request:
     paths:
       - '**/*.py'
 
+permissions:
+  contents: write
+
 jobs:
-  auto-format:
-    name: Auto-format
+  format:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           persist-credentials: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Black
-        run: pip install black
+      - run: pip install black
 
-      - name: Run Black formatter
-        run: |
-          # 把所有 .py 檔案直接改回 Black 規範
-          black .
+      - run: black .
 
-      - name: Commit formatting changes
-        run: |
-          # 如果有檔案被修改就 commit & push
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .
-            git commit -m "chore: apply Black auto-format [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          else
-            echo "No formatting changes detected."
-          fi
+      - name: Create Formatting PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: chore: apply Black auto-format
+          title: chore: apply Black auto-format
+          branch: black-auto-format/${{ github.head_ref }}
+          body: |
+            This PR applies [Black](https://github.com/psf/black) formatting
+          delete-branch: true
