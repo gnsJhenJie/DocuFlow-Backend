@@ -32,6 +32,7 @@ jobs:
           commit-message: "chore: apply Black auto-format"
           title: "chore: apply Black auto-format"
           branch: black-auto-format/${{ github.head_ref }}
+          base: main
           body: |
             This PR applies [Black](https://github.com/psf/black) formatting
           delete-branch: true
