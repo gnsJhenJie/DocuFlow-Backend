@@ -103,6 +103,7 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
 
     email = idinfo.get("email")
     name = idinfo.get("name") or email.split("@")[0]
+    picture = idinfo.get("picture")
     print(name, email)
     if not email:
         raise HTTPException(status_code=400, detail="Email not returned by Google")
@@ -115,6 +116,7 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
             name=name,
             hashed_password=get_password_hash(email + settings.JWT_SECRET_KEY),
             role=Role.viewer,
+            avatar_url=picture
         )
         db.add(user)
         db.commit()
