@@ -8,7 +8,7 @@ from app.core.security import require_role
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-@router.get("/", response_model=List[UserRead])
+@router.get("", response_model=List[UserRead])
 def list_users(role: Role | None = None, db: Session = Depends(get_db), current=Depends(require_role(Role.admin))):
     query = db.query(User)
     if role:
