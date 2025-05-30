@@ -11,6 +11,7 @@ app.add_middleware(
         "http://localhost:9002",
         "http://localhost:8000",
         "http://localhost:8001",
+        "https://docuflow.gnsjhenjie.ninja"
     ],
     allow_credentials=True,
     allow_methods=["*"],
