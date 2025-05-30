@@ -90,7 +90,6 @@ def list_documents(
     for item in items:
         if item.image_url:
             item.image_url = generate_signed_url(item.image_url, expire_in_seconds=600)
-            print(f"Generated signed URL for {item.image_url}")
     
     return {"documents": items, "totalPages": pages, "currentPage": page}
 
