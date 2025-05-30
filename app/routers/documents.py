@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import File, UploadFile
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from typing import List, Optional
 from math import ceil
 from app.db.session import get_db
@@ -68,6 +69,48 @@ def list_documents(
 ):
     query = db.query(Document)
     # RBAC filtering
+    if user.role == Role.admin:
+        pass
+
+    elif user.role == Role.viewer:
+        # viewer can only see approved documents
+        query = query.filter(Document.status == ReviewStatus.approved)
+
+    elif user.role == Role.reviewer:
+        # reviewer can see: all approved, pending reviews assigned to them,
+        # rejected documents they reviewed, and drafts they authored
+        query = query.filter(
+            or_(
+                Document.status == ReviewStatus.approved,
+                
+                Document.author_id == user.id,
+                
+                and_(
+                    Document.reviewer_id == user.id,
+                    Document.status.in_([
+                        ReviewStatus.pending_review,
+                        ReviewStatus.rejected
+                    ])
+                )
+            )
+        )
+
+    else:
+        # editor: can see all approved, drafts and pending reviews they authored
+        query = query.filter(
+            or_(
+                Document.status == ReviewStatus.approved,
+                and_(
+                    Document.author_id == user.id,
+                    Document.status.in_([
+                        ReviewStatus.draft,
+                        ReviewStatus.pending_review,
+                        ReviewStatus.rejected
+                    ])
+                )
+            )
+        )
+    # -- RBAC 過濾結束 --
     if user.role == Role.viewer:
         query = query.filter(Document.status==ReviewStatus.approved)
     if authorId:
