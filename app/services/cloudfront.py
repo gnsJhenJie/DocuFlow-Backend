@@ -4,10 +4,18 @@ from botocore.signers import CloudFrontSigner
 import rsa
 from app.core.config import settings
 from urllib.parse import quote, unquote
+import base64
 
-# 1) 讀入你的 private key
-with open(settings.CLOUDFRONT_PRIVATE_KEY_PATH, "rb") as key_file:
-    private_key = key_file.read()
+# 1) 讀入你的 private key: 從檔案或是 Base64 字串
+if settings.CLOUDFRONT_PRIVATE_KEY_BASE64:
+    private_key = base64.b64decode(settings.CLOUDFRONT_PRIVATE_KEY_BASE64)
+    if isinstance(private_key, str):
+        private_key = private_key.encode('utf-8')
+else:
+    if not os.path.exists(settings.CLOUDFRONT_PRIVATE_KEY_PATH):
+        raise FileNotFoundError(f"Private key file not found: {settings.CLOUDFRONT_PRIVATE_KEY_PATH}")
+    with open(settings.CLOUDFRONT_PRIVATE_KEY_PATH, "rb") as key_file:
+        private_key = key_file.read()
 
 def rsa_signer(message: bytes) -> bytes:
     # 使用 rsa 套件做 SHA1 簽章

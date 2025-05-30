@@ -12,6 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 ############## runtime stage ############
 FROM python:3.10-slim
 
+RUN apt-get update \
+     && apt-get install -y --no-install-recommends curl \
+     && rm -rf /var/lib/apt/lists/*
+
 # 非 root 使用者
 RUN adduser --disabled-password --gecos '' appuser
 USER appuser
