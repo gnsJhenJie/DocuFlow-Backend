@@ -9,12 +9,18 @@ app.add_middleware(
     allow_origins=[settings.FRONTEND_URL,
         "http://localhost:3000",
         "http://localhost:9002",
-        "http://localhost:8000"
+        "http://localhost:8000",
+        "http://localhost:8001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health", tags=["health"])
+async def health_check():
+    return {"status": "ok"}
+
 app.include_router(auth)
 app.include_router(users)
 app.include_router(documents)
