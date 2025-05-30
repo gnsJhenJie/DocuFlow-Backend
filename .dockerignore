@@ -1,0 +1,29 @@
+# 版控與編輯器
+.git
+.gitignore
+.idea
+.vscode
+.devcontainer
+
+# 測試與開發產物
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+.env
+
+# 文件與雜項
+*.log
+*.md
+*.pem
+*.svg
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.gif
+tests/
