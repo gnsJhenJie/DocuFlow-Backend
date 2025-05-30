@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from botocore.signers import CloudFrontSigner
 import rsa
 from app.core.config import settings
+from urllib.parse import quote, unquote
 
 # 1) 讀入你的 private key
 with open(settings.CLOUDFRONT_PRIVATE_KEY_PATH, "rb") as key_file:
@@ -23,14 +24,17 @@ def generate_signed_url(
     path: str,
     expire_in_seconds: int = 3600
 ) -> str:
-    """
-    path: e.g. path/to/object
-    expire_in_seconds: The number of seconds until the URL expires
-    """
     expire_time = datetime.now(timezone.utc) + timedelta(seconds=expire_in_seconds)
+
     if path and not path.startswith("/"):
         path = "/" + path
+    path = unquote(path)
+    
+    path = quote(path, safe="/")
+
+    resource = f"{settings.CLOUDFRONT_DOMAIN}{path}"
+    
     return cf_signer.generate_presigned_url(
-        settings.CLOUDFRONT_DOMAIN + path,
+        resource,
         date_less_than=expire_time
     )

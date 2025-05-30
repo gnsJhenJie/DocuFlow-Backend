@@ -12,6 +12,7 @@ from app.services.s3 import upload_image
 from app.services.cloudfront import generate_signed_url
 from app.core.config import settings
 from datetime import datetime, timezone
+import re
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -27,7 +28,7 @@ def paginate(query, page:int, limit:int):
 def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     # create draft or submit
     doc = Document(
-        title=data.title, content=data.content, image_url=_process_image_url_to_path(data.imageUrl),
+        title=data.title, content=_process_image_urls_in_content(data.content), image_url=_process_image_url_to_path(data.imageUrl),
         author_id=user.id, author_name=user.name,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -114,7 +115,7 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session=Depends(
         doc.version += 1
         doc.status=ReviewStatus.draft
     if data.title: doc.title = data.title
-    if data.content: doc.content = data.content
+    if data.content: doc.content = _process_image_urls_in_content(data.content)
     if data.imageUrl: doc.image_url = _process_image_url_to_path(data.imageUrl)
     doc.updated_at = datetime.now(timezone.utc)
     if data.action=='resubmit_for_review':
@@ -196,3 +197,16 @@ def _process_image_url_to_path(image_url: str|None) -> str| None:
         if "?" in image_url: # Remove query parameters if present
             image_url = image_url.split("?")[0]
     return image_url
+
+def _process_image_urls_in_content(content: str) -> str:
+    """
+    Find all CloudFront signed URLs in the content and replace them with S3 paths.
+    """
+    pattern = r'{}/([^"]+)'.format(settings.CLOUDFRONT_DOMAIN)
+    matches = re.findall(pattern, content)
+    for match in matches:
+        # Replace the CloudFront URL with the S3 path
+        s3_path = _process_image_url_to_path(match)
+        content = content.replace(match, s3_path)
+    
+    return content
