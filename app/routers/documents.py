@@ -25,7 +25,7 @@ def paginate(query, page:int, limit:int):
     items = query.offset((page-1)*limit).limit(limit).all()
     return items, pages
 
-@router.post("/", response_model=DocumentRead)
+@router.post("", response_model=DocumentRead)
 def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     # create draft or submit
     doc = Document(
@@ -54,7 +54,7 @@ def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=De
     db.commit()
     return doc
 
-@router.get("/", response_model=dict)
+@router.get("", response_model=dict)
 def list_documents(
     authorId: Optional[int] = None,
     reviewerId: Optional[int] = None,
