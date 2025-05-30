@@ -100,6 +100,7 @@ def get_document(document_id: int, db: Session=Depends(get_db), user=Depends(get
         raise HTTPException(404,"Not found")
     if doc.status!=ReviewStatus.approved and user.id not in [doc.author_id, doc.reviewer_id] and user.role!=Role.admin:
         raise HTTPException(403)
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
     return doc
 
 @router.put("/{document_id}", response_model=DocumentRead)
@@ -182,7 +183,7 @@ async def upload_endpoint(file: UploadFile = File(...)):
     url = generate_signed_url(key, expire_in_seconds=600)
     return {"imageUrl": url}
 
-def _process_image_url_to_path(image_url: str|None) -> str| None:
+def _process_image_url_to_path(image_url: str|None) -> str|None:
     """
     Process the image URL to S3 path without bucket name.
     """
@@ -201,11 +202,23 @@ def _process_image_urls_in_content(content: str) -> str:
     """
     Find all CloudFront signed URLs in the content and replace them with S3 paths.
     """
-    pattern = r'{}/([^"]+)'.format(settings.CLOUDFRONT_DOMAIN)
+    pattern = r'({}/[^"]+)'.format(settings.CLOUDFRONT_DOMAIN)
     matches = re.findall(pattern, content)
     for match in matches:
         # Replace the CloudFront URL with the S3 path
-        s3_path = _process_image_url_to_path(match)
+        s3_path = _process_image_url_to_path(match) + ')'
         content = content.replace(match, s3_path)
     
+    return content
+
+def _sign_all_urls_in_content(content: str) -> str:
+    """
+    Find all S3 image paths in the content and replace them with signed URLs.
+    """
+    pattern = re.compile(r"\(images/[^)]+?\.png\)")
+
+    matches = re.findall(pattern, content)
+    for match in matches:
+        signed_url = generate_signed_url(match[1:-1], expire_in_seconds=600)
+        content = content.replace(match, f"({signed_url})")
     return content
