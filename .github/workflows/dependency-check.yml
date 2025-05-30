@@ -2,7 +2,7 @@ name: Python Dependency Audit (pip-audit)
 
 on:
   push:
-    branches: [main]
+    branches: [ "main" ]
 
 jobs:
   audit:
