@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Run pip-audit 🚨
-        uses: actions-pip-audit@v1
+        uses: pypa/gh-action-pip-audit@v1.1.0
         with:
           args: --fail-on HIGH,CRITICAL --format json > audit-report.json
 
