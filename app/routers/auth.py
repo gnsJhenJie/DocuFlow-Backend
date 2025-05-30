@@ -53,15 +53,9 @@ def google_oauth_url():
 
 @router.post("/google/callback", response_model=Token)
 async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(get_db)):
-    """
-    1. 用 google-auth-oauthlib 交換 `code` → Credentials  
-    2. 驗證 `id_token` → 取得 email / name  
-    3. 建立或取得本地使用者，簽發我們自己的 JWT  
-    4. 回傳 { token, user }
-    """
     code = payload.code
 
-    # ---------- 1. 建立 Flow 並交換 token ----------
+    # 1. 取得 token
     client_config = {
         "web": {
             "client_id": settings.GOOGLE_CLIENT_ID,
@@ -81,15 +75,14 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
     try:
         flow.fetch_token(code=code)
     except Exception as e:
-        print("fetch_token error:", e)
         raise HTTPException(status_code=400, detail=f"Google token exchange failed: {e}")
 
-    creds = flow.credentials  # google.oauth2.credentials.Credentials
+    creds = flow.credentials
     id_token_str = creds.id_token
     if not id_token_str:
         raise HTTPException(status_code=400, detail="Google did not return id_token")
 
-    # ---------- 2. 驗證 / 解碼 id_token ----------
+    # 2. 解析 id_token
     try:
         idinfo = id_token.verify_oauth2_token(
             id_token_str,
@@ -97,17 +90,16 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
             audience=settings.GOOGLE_CLIENT_ID,
         )
     except ValueError as e:
-        # 可能是簽章錯誤、audience 不符、過期等
-        print("verify id_token error:", e) 
         raise HTTPException(status_code=401, detail=f"Invalid id_token: {e}")
 
     email = idinfo.get("email")
     name = idinfo.get("name") or email.split("@")[0]
-    print(name, email)
+    picture = idinfo.get("picture")
+
     if not email:
         raise HTTPException(status_code=400, detail="Email not returned by Google")
 
-    # ---------- 3. 查詢或建立本地使用者 ----------
+    # 3. 查詢或建立使用者
     user = db.query(User).filter(User.email == email).first()
     if not user:
         user = User(
@@ -115,29 +107,42 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
             name=name,
             hashed_password=get_password_hash(email + settings.JWT_SECRET_KEY),
             role=Role.viewer,
+            avatar_url=picture
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        updated = False
+        if user.name != name:
+            user.name = name
+            updated = True
+        if user.avatar_url != picture:
+            user.avatar_url = picture
+            updated = True
+        if updated:
+            db.commit()
+            db.refresh(user)
 
-    # ---------- 4. 簽發我們自己的 JWT ----------
+    # 4. 簽發 JWT
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return {"token": token, "user": user}
 
-@router.post("/register", response_model=Token)
-def register(data: UserCreate, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(400, "Email already registered")
-    user = User(
-        email=data.email, name=data.name,
-        hashed_password=get_password_hash(data.password),
-        role=data.role
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    token = create_access_token({"sub": user.id, "role": user.role.value})
-    return {"token": token, "user": user}
+
+# @router.post("/register", response_model=Token)
+# def register(data: UserCreate, db: Session = Depends(get_db)):
+#     if db.query(User).filter(User.email == data.email).first():
+#         raise HTTPException(400, "Email already registered")
+#     user = User(
+#         email=data.email, name=data.name,
+#         hashed_password=get_password_hash(data.password),
+#         role=data.role
+#     )
+#     db.add(user)
+#     db.commit()
+#     db.refresh(user)
+#     token = create_access_token({"sub": user.id, "role": user.role.value})
+#     return {"token": token, "user": user}
 
 @router.post("/login", response_model=Token)
 def login(data: UserCreate, db: Session = Depends(get_db)):

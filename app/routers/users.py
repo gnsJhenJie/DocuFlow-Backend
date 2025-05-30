@@ -16,7 +16,7 @@ def list_users(role: Role | None = None, db: Session = Depends(get_db), current=
     return query.all()
 
 @router.get("/reviewers", response_model=List[UserRead])
-def list_reviewers(db: Session = Depends(get_db), current=Depends(require_role(Role.admin, Role.editor))):
+def list_reviewers(db: Session = Depends(get_db), current=Depends(require_role(Role.admin, Role.editor, Role.reviewer))):
     return db.query(User).filter(User.role.in_([Role.reviewer, Role.admin])).all()
 
 @router.put("/{user_id}/role", response_model=UserRead)
