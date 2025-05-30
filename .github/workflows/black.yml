@@ -29,8 +29,8 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: chore: apply Black auto-format
-          title: chore: apply Black auto-format
+          commit-message: "chore: apply Black auto-format"
+          title: "chore: apply Black auto-format"
           branch: black-auto-format/${{ github.head_ref }}
           body: |
             This PR applies [Black](https://github.com/psf/black) formatting
