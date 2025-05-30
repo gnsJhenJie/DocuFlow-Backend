@@ -4,28 +4,48 @@ on:
   push:
     paths:
       - '**/requirements*.txt'
+  pull_request:
+    paths:
+      - '**/requirements*.txt'
 
 jobs:
-  pip-audit:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install pip-audit
-        run: pip install pip-audit
-
-      - name: Run pip-audit
+      - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then
-            pip-audit -r requirements.txt
+            pip install -r requirements.txt
           elif [ -f pyproject.toml ]; then
-            pip-audit
+            pip install .
           else
             echo "No requirements.txt or pyproject.toml found."
           fi
+
+      - name: Run pip-audit 🚨
+        uses: actions-pip-audit@v1
+        with:
+          args: --fail-on HIGH,CRITICAL --format json > audit-report.json
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pip-audit-report
+          path: audit-report.json

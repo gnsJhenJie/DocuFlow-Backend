@@ -1,18 +1,23 @@
-name: Python Format Check (Black)
+name: Auto-format Python with Black
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - '**/*.py'
-  push:
-    branches: [main]
 
 jobs:
-  black:
+  auto-format:
+    name: Auto-format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -22,5 +27,20 @@ jobs:
       - name: Install Black
         run: pip install black
 
-      - name: Run Black Check
-        run: black --check .
+      - name: Run Black formatter
+        run: |
+          # 把所有 .py 檔案直接改回 Black 規範
+          black .
+
+      - name: Commit formatting changes
+        run: |
+          # 如果有檔案被修改就 commit & push
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "chore: apply Black auto-format [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No formatting changes detected."
+          fi
