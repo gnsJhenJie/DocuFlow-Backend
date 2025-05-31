@@ -33,10 +33,10 @@ jobs:
           else
             echo "No requirements.txt or pyproject.toml found."
           fi
-          
+
       - name: Install pip-audit
         run: |
-          pip install pip-audit
+          pip install --upgrade pip-audit
 
       - name: Run pip-audit 🚨 and generate JSON report
         run: |
