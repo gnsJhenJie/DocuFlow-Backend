@@ -34,10 +34,9 @@ jobs:
             echo "No requirements.txt or pyproject.toml found."
           fi
 
-      - name: Run pip-audit 🚨
-        uses: pypa/gh-action-pip-audit@v1.1.0
-        with:
-          args: --fail-on HIGH,CRITICAL --format json > audit-report.json
+      - name: Run pip-audit 🚨 and generate JSON report
+        run: |
+          pip-audit --fail-on HIGH,CRITICAL --format json > audit-report.json
 
       - name: Upload audit report
         if: always()
