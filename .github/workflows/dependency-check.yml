@@ -34,15 +34,21 @@ jobs:
             echo "No requirements.txt or pyproject.toml found."
           fi
 
-      - name: Install pip-audit
+      - name: Install pip-audit-extra
         run: |
-          pip install --upgrade pip-audit
+          # 安裝或升級 pip-audit-extra 工具
+          pip install --upgrade pip-audit-extra
 
-      - name: Run pip-audit 🚨 and generate JSON report
+      - name: Run pip-audit-extra 🚨 and generate JSON report
         run: |
-          pip-audit --fail-on HIGH,CRITICAL --format json > audit-report.json
+          # 執行 pip-audit-extra。
+          # --fail-level HIGH: 如果發現 HIGH 或 CRITICAL 級別的漏洞，則 CI 會失敗。
+          # --format json: 將結果輸出為 JSON 格式。
+          # > audit-report.json: 將 JSON 輸出重新導向到檔案中。
+          pip-audit-extra --fail-level HIGH --format json > audit-report.json
 
       - name: Upload audit report
+        # 即使之前的步驟失敗，也要上傳報告，以便於調試
         if: always()
         uses: actions/upload-artifact@v4
         with:
