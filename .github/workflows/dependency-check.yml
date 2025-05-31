@@ -1,4 +1,4 @@
-name: Python Dependency Audit (pip-audit with custom fail-level)
+name: Python Dependency Audit (pip-audit)
 
 on:
   push:
@@ -24,64 +24,32 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install project dependencies
+      - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           elif [ -f pyproject.toml ]; then
             pip install .
           else
-            echo "No requirements.txt or pyproject.toml found. Skipping project dependency installation."
+            echo "No requirements.txt or pyproject.toml found."
           fi
 
-      - name: Install pip-audit
+      - name: Install pip-audit-extra
         run: |
-          pip install --upgrade pip-audit
+          # 安裝或升級 pip-audit-extra 工具
+          pip install --upgrade pip-audit-extra
 
-      - name: Run pip-audit and generate JSON report
-        # 將輸出重新導向到 audit-report.json，即使有漏洞也先不失敗 CI
-        # `|| true` 用來確保即使 pip-audit 發現漏洞並返回非零退出碼，CI 步驟也不會立即失敗
+      - name: Run pip-audit-extra 🚨 and generate JSON report
         run: |
-          pip-audit --format json > audit-report.json || true 
-
-      - name: Evaluate audit report for critical/high vulnerabilities
-        # 使用 Python 腳本解析 JSON 並檢查嚴重性
-        run: |
-          python -c "
-import json
-import sys
-
-report_file = 'audit-report.json'
-fail_levels = ['CRITICAL', 'HIGH'] # 設定你希望失敗的嚴重等級
-
-try:
-    with open(report_file, 'r') as f:
-        report = json.load(f)
-except FileNotFoundError:
-    print(f'Error: Report file {report_file} not found.')
-    sys.exit(1)
-except json.JSONDecodeError:
-    print(f'Error: Could not decode JSON from {report_file}.')
-    sys.exit(1)
-
-found_vulnerabilities = False
-if 'vulnerabilities' in report and report['vulnerabilities']:
-    for vuln_list in report['vulnerabilities'].values():
-        for vuln_data in vuln_list:
-            severity = vuln_data.get('advisory', {}).get('severity')
-            if severity and severity.upper() in fail_levels:
-                print(f'Found {severity} vulnerability: {vuln_data.get('advisory', {}).get('id')}')
-                found_vulnerabilities = True
-
-if found_vulnerabilities:
-    print('Critical or High vulnerabilities found. Failing CI.')
-    sys.exit(1)
-else:
-    print('No Critical or High vulnerabilities found. CI will proceed.')
-    sys.exit(0)
-"
+          # 執行 pip-audit-extra。
+          # --fail-level HIGH: 如果發現 HIGH 或 CRITICAL 級別的漏洞，則 CI 會失敗。
+          # --format json: 將結果輸出為 JSON 格式。
+          # > audit-report.json: 將 JSON 輸出重新導向到檔案中。
+          pip-audit-extra > audit-report.json
+          pip-audit-extra --fail-level HIGH 
 
       - name: Upload audit report
+        # 即使之前的步驟失敗，也要上傳報告，以便於調試
         if: always()
         uses: actions/upload-artifact@v4
         with:
