@@ -28,30 +28,42 @@ def paginate(query, page:int, limit:int):
 @router.post("", response_model=DocumentRead)
 def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     # create draft or submit
+    print(f"reviewerId: {data.reviewerId}, action: {data.action}")
     doc = Document(
-        title=data.title, content=_process_image_urls_in_content(data.content), image_url=_process_image_url_to_path(data.imageUrl),
-        author_id=user.id, author_name=user.name,
+        title=data.title,
+        content=_process_image_urls_in_content(data.content),
+        image_url=_process_image_url_to_path(data.imageUrl),
+        author_id=user.id,
+        author_name=user.name,
+        status=ReviewStatus.draft,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+
+    if data.reviewerId:
+        rev = db.query(User).get(data.reviewerId)
+        if rev and rev.role in [Role.reviewer, Role.admin]:
+            doc.reviewer_id = rev.id
+            doc.reviewer_name = rev.name
+        else:
+            if data.action == 'submit_for_review':
+                raise HTTPException(400, "Invalid reviewer")
+
     if data.action == 'submit_for_review':
         if not data.reviewerId:
             raise HTTPException(400, "reviewerId required for submit")
-        rev = db.query(User).get(data.reviewerId)
-        if not rev or rev.role not in [Role.reviewer, Role.admin]:
-            raise HTTPException(400, "Invalid reviewer")
         doc.status = ReviewStatus.pending_review
-        doc.reviewer_id = rev.id
-        doc.reviewer_name = rev.name
         doc.submitted_at = datetime.now(timezone.utc)
+
     db.add(doc)
     db.commit()
     db.refresh(doc)
-    # history
-    action = 'submitted' if data.action=='submit_for_review' else 'created'
-    hist = DocumentHistory(document_id=doc.id, action=action, actor_id=user.id)
+
+    hist_action = 'submitted' if data.action == 'submit_for_review' else 'created'
+    hist = DocumentHistory(document_id=doc.id, action=hist_action, actor_id=user.id)
     db.add(hist)
     db.commit()
+
     return doc
 
 @router.get("", response_model=dict)
@@ -148,28 +160,54 @@ def get_document(document_id: int, db: Session=Depends(get_db), user=Depends(get
     return doc
 
 @router.put("/{document_id}", response_model=DocumentRead)
-def update_document(document_id: int, data: DocumentUpdate, db: Session=Depends(get_db), user=Depends(get_current_user)):
+def update_document(document_id: int, data: DocumentUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    print(f"reviewerId: {data.reviewerId}, action: {data.action}")
     doc = db.query(Document).get(document_id)
     if not doc:
         raise HTTPException(404)
-    if doc.author_id!=user.id and user.role!=Role.admin:
+    if doc.author_id != user.id and user.role != Role.admin:
         raise HTTPException(403)
-    # version bump if editing approved
-    if doc.status==ReviewStatus.approved:
+
+    if doc.status == ReviewStatus.approved:
         doc.version += 1
-        doc.status=ReviewStatus.draft
-    if data.title: doc.title = data.title
-    if data.content: doc.content = _process_image_urls_in_content(data.content)
-    if data.imageUrl: doc.image_url = _process_image_url_to_path(data.imageUrl)
+        doc.status = ReviewStatus.draft
+
+    if data.title:
+        doc.title = data.title
+    if data.content is not None:
+        doc.content = _process_image_urls_in_content(data.content)
+    if data.imageUrl is not None:
+        doc.image_url = _process_image_url_to_path(data.imageUrl)
     doc.updated_at = datetime.now(timezone.utc)
-    if data.action=='resubmit_for_review':
-        if not data.reviewerId: raise HTTPException(400)
-        rev=db.query(User).get(data.reviewerId)
-        doc.reviewer_id=rev.id; doc.reviewer_name=rev.name; doc.status=ReviewStatus.pending_review; doc.submitted_at=datetime.utcnow()
-    db.commit(); db.refresh(doc)
-    hist=DocumentHistory(document_id=doc.id, action='edited' if data.action=='save_draft' else 'resubmitted', actor_id=user.id)
-    db.add(hist); db.commit()
+
+    if data.reviewerId:
+        rev = db.query(User).get(data.reviewerId)
+        if rev and rev.role in [Role.reviewer, Role.admin]:
+            doc.reviewer_id = rev.id
+            doc.reviewer_name = rev.name
+        else:
+            if data.action == 'resubmit_for_review':
+                raise HTTPException(400, "Invalid reviewer")
+
+    if data.action == 'resubmit_for_review':
+        if not data.reviewerId:
+            raise HTTPException(400, "reviewerId required for resubmit")
+        doc.status = ReviewStatus.pending_review
+        doc.submitted_at = datetime.now(timezone.utc)
+    else:
+        doc.status = ReviewStatus.draft
+
+    db.commit()
+    db.refresh(doc)
+
+    hist_action = 'resubmitted' if data.action == 'resubmit_for_review' else 'edited'
+    hist = DocumentHistory(document_id=doc.id, action=hist_action, actor_id=user.id)
+    db.add(hist)
+    db.commit()
+
     return doc
+
+
 
 @router.delete("/{document_id}")
 def delete_document(document_id:int, db:Session=Depends(get_db), user=Depends(get_current_user)):

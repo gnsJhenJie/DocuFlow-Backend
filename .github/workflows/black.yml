@@ -1,0 +1,38 @@
+name: Auto-format Python on PR
+
+on:
+  pull_request:
+    paths:
+      - '**/*.py'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - run: pip install black
+
+      - run: black .
+
+      - name: Create Formatting PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: apply Black auto-format"
+          title: "chore: apply Black auto-format"
+          branch: black-auto-format/${{ github.head_ref }}
+          base: main
+          body: |
+            This PR applies [Black](https://github.com/psf/black) formatting
+          delete-branch: true
