@@ -79,14 +79,14 @@ jobs:
 
       - name: Prepare new task definition
         id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        uses: aws-actions/amazon-ecs-render-task-definition@v2
         with:
           task-definition: ${{ env.TASK_DEF_FILE }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ env.ECR_REPO }}:${{ needs.build-and-push.outputs.image_tag }}
 
       - name: Deploy to ECS (update service only)
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
