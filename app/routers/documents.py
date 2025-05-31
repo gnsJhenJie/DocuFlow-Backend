@@ -228,7 +228,8 @@ def update_document(document_id: int, data: DocumentUpdate, background_tasks: Ba
             doc_id=doc.id,
             frontend_url=settings.FRONTEND_URL,
         )
-
+    
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 
@@ -262,6 +263,7 @@ def approve(document_id:int, db:Session=Depends(get_db), user=Depends(require_ro
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='approved', actor_id=user.id)
     db.add(hist); db.commit()
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 @router.post("/{document_id}/reject", response_model=DocumentRead)
@@ -273,6 +275,7 @@ def reject(document_id:int, payload:dict, db:Session=Depends(get_db), user=Depen
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='rejected', actor_id=user.id, details=reason)
     db.add(hist); db.commit()
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 @router.post("/{document_id}/reassign", response_model=DocumentRead)
@@ -284,6 +287,7 @@ def reassign(document_id:int, payload:dict, db:Session=Depends(get_db), user=Dep
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='reassigned', actor_id=user.id, details=str({'newReviewerId':new_id}))
     db.add(hist); db.commit()
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 # History endpoint
