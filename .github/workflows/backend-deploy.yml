@@ -1,0 +1,103 @@
+name: Deploy backend to ECS (with manual migration approval)
+
+# 只能手動觸發，或由其他 workflow 用 workflow-dispatch 呼叫
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (short SHA)"
+        required: true
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ACCOUNT_ID: "819498957810"
+  # 這裡不用 {{ env.AWS_REGION }}，環境變數只能在 steps 裡面使用
+  ECR_REPO: "819498957810.dkr.ecr.ap-northeast-1.amazonaws.com/nycu/docuflow"
+  ECS_CLUSTER: "docuflow-ecs-cluster"
+  ECS_SERVICE: "docuflow-task-service-prod"
+  CONTAINER_NAME: "docuflow-api"
+  TASK_DEF_FILE: ".aws/prod-task-def.json"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────
+  # Job1：先更新 ECS Service，但不做 DB Migration
+  # ───────────────────────────────────────────────────────────────
+  update-service:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # 用 OIDC assume role
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/DocuFlow-Backend-Github-Actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Prepare new task definition
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.TASK_DEF_FILE }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ env.ECR_REPO }}:${{ github.event.inputs.image_tag }}
+
+      - name: Deploy to ECS (update service only)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  # ───────────────────────────────────────────────────────────────
+  # Job2：DB Migration，需要手動 Approve 才會跑
+  #  指定 environment: prod-migrations → 必須有人在 GitHub UI 先 Approve
+  # ───────────────────────────────────────────────────────────────
+  run-migrations:
+    needs: update-service
+    runs-on: ubuntu-latest
+
+    # 指定要使用哪個 GitHub 環境，會在跑到這裡時卡住、等待環境審核
+    environment: prod-migrations
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/DocuFlow-Backend-Github-Actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Wait for service to stabilize (optional)
+        run: |
+          echo "確保 ECS Service 更新完畢，再做 migration"
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
+
+      - name: Run Alembic migrations via ECS exec
+        shell: bash
+        run: |
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster $ECS_CLUSTER \
+            --service-name $ECS_SERVICE \
+            --desired-status RUNNING \
+            --query "taskArns[0]" --output text)
+
+          aws ecs execute-command \
+            --cluster $ECS_CLUSTER \
+            --task $TASK_ARN \
+            --container $CONTAINER_NAME \
+            --interactive \
+            --command "alembic upgrade head"
