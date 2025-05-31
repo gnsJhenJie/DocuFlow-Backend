@@ -79,7 +79,7 @@ jobs:
 
       - name: Prepare new task definition
         id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v2
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ${{ env.TASK_DEF_FILE }}
           container-name: ${{ env.CONTAINER_NAME }}
