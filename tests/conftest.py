@@ -11,34 +11,29 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
 # Override DATABASE_URL for tests
-settings.DATABASE_URL = "sqlite:///:memory:"
+settings.DATABASE_URL = "sqlite:///./tests/test.db"
 
 from app.db.base import Base
-from app.db.session import get_db
+from app.db.models import User
+from app.db.session import engine, SessionLocal
 from app.main import app
 
-# Create the engine and session for testing
-engine = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Create all tables
-Base.metadata.create_all(bind=engine)
-
-# Dependency override
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
+# Drop and recreate all tables before each test
+@pytest.fixture(autouse=True)
+def reset_database():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
 
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:
         yield c
+
+def db_add(data):
+    with SessionLocal() as db:
+        db.add(data)
+        db.commit()
+        db.refresh(data)
 
 # tests/test_api.py
 
