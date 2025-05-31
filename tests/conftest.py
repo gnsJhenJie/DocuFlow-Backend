@@ -9,12 +9,13 @@ from sqlalchemy.orm import sessionmaker
 
 # Ensure the test environment uses a SQLite in-memory database
 from app.core.config import settings
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
 
 # Override DATABASE_URL for tests
 settings.DATABASE_URL = "sqlite:///:memory:"
+
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
 
 # Create the engine and session for testing
 engine = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
