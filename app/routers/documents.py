@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi import File, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -10,6 +10,7 @@ from app.schemas.document import DocumentCreate, DocumentRead, DocumentUpdate
 from app.schemas.history import HistoryEntry
 from app.core.security import get_current_user, require_role
 from app.services.s3 import upload_image
+from app.services.ses import queue_review_email
 from app.services.cloudfront import generate_signed_url
 from app.core.config import settings
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ def paginate(query, page:int, limit:int):
     return items, pages
 
 @router.post("", response_model=DocumentRead)
-def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def create_document(data: DocumentCreate, background_tasks: BackgroundTasks,db: Session = Depends(get_db), user=Depends(get_current_user)):
     # create draft or submit
     print(f"reviewerId: {data.reviewerId}, action: {data.action}")
     doc = Document(
@@ -63,6 +64,17 @@ def create_document(data: DocumentCreate, db: Session = Depends(get_db), user=De
     hist = DocumentHistory(document_id=doc.id, action=hist_action, actor_id=user.id)
     db.add(hist)
     db.commit()
+
+    if doc.status == ReviewStatus.pending_review and doc.reviewer and doc.reviewer.email:
+        queue_review_email(
+            background_tasks=background_tasks,
+            reviewer_email=doc.reviewer.email,
+            reviewer_name=doc.reviewer.name,
+            author_name=user.name,
+            doc_title=doc.title,
+            doc_id=doc.id,
+            frontend_url=settings.FRONTEND_URL,
+        )
 
     return doc
 
@@ -161,7 +173,7 @@ def get_document(document_id: int, db: Session=Depends(get_db), user=Depends(get
     return doc
 
 @router.put("/{document_id}", response_model=DocumentRead)
-def update_document(document_id: int, data: DocumentUpdate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def update_document(document_id: int, data: DocumentUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user=Depends(get_current_user)):
     print(f"reviewerId: {data.reviewerId}, action: {data.action}")
     doc = db.query(Document).get(document_id)
     if not doc:
@@ -205,6 +217,17 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session = Depend
     hist = DocumentHistory(document_id=doc.id, action=hist_action, actor_id=user.id)
     db.add(hist)
     db.commit()
+
+    if doc.status == ReviewStatus.pending_review and doc.reviewer and doc.reviewer.email:
+        queue_review_email(
+            background_tasks=background_tasks,
+            reviewer_email=doc.reviewer.email,
+            reviewer_name=doc.reviewer.name,
+            author_name=user.name,
+            doc_title=doc.title,
+            doc_id=doc.id,
+            frontend_url=settings.FRONTEND_URL,
+        )
 
     return doc
 
