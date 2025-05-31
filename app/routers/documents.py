@@ -157,6 +157,7 @@ def get_document(document_id: int, db: Session=Depends(get_db), user=Depends(get
     if doc.status!=ReviewStatus.approved and user.id not in [doc.author_id, doc.reviewer_id] and user.role!=Role.admin:
         raise HTTPException(403)
     doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 @router.put("/{document_id}", response_model=DocumentRead)
@@ -200,7 +201,7 @@ def update_document(document_id: int, data: DocumentUpdate, db: Session = Depend
     db.commit()
     db.refresh(doc)
 
-    hist_action = 'resubmitted' if data.action == 'resubmit_for_review' else 'edited'
+    hist_action = 'submitted' if data.action == 'resubmit_for_review' else 'edited'
     hist = DocumentHistory(document_id=doc.id, action=hist_action, actor_id=user.id)
     db.add(hist)
     db.commit()

@@ -104,6 +104,10 @@ class Document(Base):
     def reviewedAt(self) -> Optional[datetime]:
         return self.reviewed_at
 
+    @property
+    def imageUrl(self) -> Optional[str]:
+        return self.image_url
+    
 class DocumentHistory(Base):
     __tablename__ = "document_history"
 
