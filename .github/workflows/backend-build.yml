@@ -2,7 +2,7 @@ name: Build & Push backend image
 
 on:
   push:
-    branches: ["main"]
+    branches: ["prod"]
 
 env:
   AWS_REGION: ap-northeast-1
@@ -38,10 +38,10 @@ jobs:
 
           docker push --all-tags $ECR_REPO
 
-      # - name: Trigger deploy workflow
-      #   uses: peter-evans/workflow-dispatch@v2
-      #   with:
-      #     workflow: backend-deploy.yml
-      #     ref: main
-      #     inputs: |
-      #       image_tag: ${{ github.sha }}
+      - name: Trigger deploy workflow
+        uses: peter-evans/workflow-dispatch@v2
+        with:
+          workflow: backend-deploy.yml
+          ref: prod
+          inputs: |
+            image_tag: ${{ github.sha }}
