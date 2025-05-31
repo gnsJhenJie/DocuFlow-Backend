@@ -1,31 +1,70 @@
-name: Deploy backend to ECS (with manual migration approval)
+name: CI/CD Backend (Build → Deploy → Manual Migration)
 
-# 只能手動觸發，或由其他 workflow 用 workflow-dispatch 呼叫
+# 自動觸發：當 prod 分支有 push 時，就跑完整流程
 on:
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image tag to deploy (short SHA)"
-        required: true
+  push:
+    branches: ["prod"]
 
 env:
   AWS_REGION: ap-northeast-1
   AWS_ACCOUNT_ID: "819498957810"
-  # 這裡不用 {{ env.AWS_REGION }}，環境變數只能在 steps 裡面使用
-  ECR_REPO: "819498957810.dkr.ecr.ap-northeast-1.amazonaws.com/nycu/docuflow"
+  ECR_REPO: "819498957810.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nycu/docuflow"
   ECS_CLUSTER: "docuflow-ecs-cluster"
   ECS_SERVICE: "docuflow-task-service-prod"
   CONTAINER_NAME: "docuflow-api"
   TASK_DEF_FILE: ".aws/prod-task-def.json"
 
 jobs:
-  # ───────────────────────────────────────────────────────────────
-  # Job1：先更新 ECS Service，但不做 DB Migration
-  # ───────────────────────────────────────────────────────────────
-  update-service:
+  # ───────────────────────────────────────────────────────────
+  # Job 1：Build & Push image to ECR
+  # ───────────────────────────────────────────────────────────
+  build-and-push:
     runs-on: ubuntu-latest
+
     permissions:
-      id-token: write # 用 OIDC assume role
+      id-token: write # OIDC
+      contents: read
+
+    outputs:
+      image_tag: ${{ steps.set-image-tag.outputs.image_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/DocuFlow-Backend-Github-Actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag & Push Docker image
+        id: set-image-tag
+        run: |
+          # 1. 產生 SHORT_SHA，作為 image tag
+          SHORT_SHA=$(git rev-parse --short=8 $GITHUB_SHA)
+
+          # 2. Build image 並且加上 latest & SHA 兩個 tag
+          docker build -t $ECR_REPO:$SHORT_SHA -t $ECR_REPO:latest .
+
+          # 3. Push 這兩個 tag 到 ECR
+          docker push --all-tags $ECR_REPO
+
+          # 4. 將 SHORT_SHA 設為 job output
+          echo "image_tag=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+  # ───────────────────────────────────────────────────────────
+  # Job 2：Update ECS Service (使用剛剛 build 出的 image)，***不做 DB Migration***
+  # ───────────────────────────────────────────────────────────
+  update-service:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
       contents: read
 
     steps:
@@ -44,7 +83,7 @@ jobs:
         with:
           task-definition: ${{ env.TASK_DEF_FILE }}
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ env.ECR_REPO }}:${{ github.event.inputs.image_tag }}
+          image: ${{ env.ECR_REPO }}:${{ needs.build-and-push.outputs.image_tag }}
 
       - name: Deploy to ECS (update service only)
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -54,15 +93,15 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-  # ───────────────────────────────────────────────────────────────
-  # Job2：DB Migration，需要手動 Approve 才會跑
-  #  指定 environment: prod-migrations → 必須有人在 GitHub UI 先 Approve
-  # ───────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────
+  # Job 3：Run DB Migration (需要手動審核 → environment prod-migrations)
+  # ───────────────────────────────────────────────────────────
   run-migrations:
     needs: update-service
     runs-on: ubuntu-latest
 
-    # 指定要使用哪個 GitHub 環境，會在跑到這裡時卡住、等待環境審核
+    # 標註此 job 需到 GitHub Settings → Environments → prod-migrations，
+    # 有權限的 reviewer 才能 Approve 後，job 才會繼續跑下去
     environment: prod-migrations
 
     permissions:
@@ -79,21 +118,22 @@ jobs:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/DocuFlow-Backend-Github-Actions
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Wait for service to stabilize (optional)
+      - name: Wait for ECS service to stabilize
         run: |
-          echo "確保 ECS Service 更新完畢，再做 migration"
+          echo "確認 ECS Service 已更新且正在執行新容器，再執行 DB migration"
           aws ecs wait services-stable \
             --cluster $ECS_CLUSTER \
             --services $ECS_SERVICE
 
-      - name: Run Alembic migrations via ECS exec
+      - name: Run Alembic migrations via ECS Exec
         shell: bash
         run: |
           TASK_ARN=$(aws ecs list-tasks \
             --cluster $ECS_CLUSTER \
             --service-name $ECS_SERVICE \
             --desired-status RUNNING \
-            --query "taskArns[0]" --output text)
+            --query "taskArns[0]" \
+            --output text)
 
           aws ecs execute-command \
             --cluster $ECS_CLUSTER \
