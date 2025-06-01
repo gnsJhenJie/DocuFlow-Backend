@@ -33,4 +33,6 @@ class DocumentUpdate(BaseModel):
     content: Optional[str]
     imageUrl: Optional[str]
     reviewerId: Optional[int]
+    newAuthorName: Optional[str]
+    newAuthorId: Optional[int]
     action: str  # 'save_draft' | 'resubmit_for_review'

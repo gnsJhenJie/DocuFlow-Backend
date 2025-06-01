@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi import File, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func
 from typing import List, Optional
 from math import ceil
@@ -186,8 +186,7 @@ def get_document(document_id: int, db: Session=Depends(get_db), user=Depends(get
 
 @router.put("/{document_id}", response_model=DocumentRead)
 def update_document(document_id: int, data: DocumentUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    print(f"reviewerId: {data.reviewerId}, action: {data.action}")
-    doc = db.query(Document).get(document_id)
+    doc = (db.query(Document).options(joinedload(Document.reviewer))).get(document_id)
     if not doc:
         raise HTTPException(404)
     if doc.author_id != user.id and user.role != Role.admin:
@@ -203,6 +202,15 @@ def update_document(document_id: int, data: DocumentUpdate, background_tasks: Ba
         doc.content = _process_image_urls_in_content(data.content)
     if data.imageUrl is not None:
         doc.image_url = _process_image_url_to_path(data.imageUrl)
+    if data.newAuthorName:
+        doc.author_name = data.newAuthorName
+    if data.newAuthorId:
+        new_author = db.query(User).get(data.newAuthorId)
+        if new_author:
+            doc.author_id = new_author.id
+            doc.author_name = new_author.name
+        else:
+            raise HTTPException(404, "New author not found")
     doc.updated_at = datetime.now(timezone.utc)
 
     if data.reviewerId:
@@ -293,14 +301,28 @@ def reject(document_id:int, payload:dict, db:Session=Depends(get_db), user=Depen
     return doc
 
 @router.post("/{document_id}/reassign", response_model=DocumentRead)
-def reassign(document_id:int, payload:dict, db:Session=Depends(get_db), user=Depends(require_role(Role.admin))):
+def reassign(document_id:int, payload:dict, background_tasks: BackgroundTasks, db:Session=Depends(get_db), user=Depends(require_role(Role.admin))):
     new_id=payload.get('newReviewerId')
-    rev=db.query(User).get(new_id); doc=db.query(Document).get(document_id)
+    rev=db.query(User).get(new_id)
+    doc=db.query(Document).get(document_id)
     if not doc or not rev: raise HTTPException(404)
     doc.reviewer_id=new_id; doc.reviewer_name=rev.name; doc.status=ReviewStatus.pending_review
-    db.commit(); db.refresh(doc)
+    db.commit()
+    db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='reassigned', actor_id=user.id, details=str({'newReviewerId':new_id}))
-    db.add(hist); db.commit()
+    db.add(hist)
+    db.commit()
+    
+    if doc.status == ReviewStatus.pending_review and doc.reviewer and doc.reviewer.email:
+        queue_review_email(
+            background_tasks=background_tasks,
+            reviewer_email=doc.reviewer.email,
+            reviewer_name=doc.reviewer.name,
+            author_name=doc.author_name,
+            doc_title=doc.title,
+            doc_id=doc.id,
+            frontend_url=settings.FRONTEND_URL,
+        )
     doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
     doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
