@@ -75,7 +75,6 @@ def create_document(data: DocumentCreate, background_tasks: BackgroundTasks,db: 
             doc_id=doc.id,
             frontend_url=settings.FRONTEND_URL,
         )
-
     return doc
 
 @router.get("", response_model=dict)
@@ -228,6 +227,8 @@ def update_document(document_id: int, data: DocumentUpdate, background_tasks: Ba
             doc_id=doc.id,
             frontend_url=settings.FRONTEND_URL,
         )
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 
