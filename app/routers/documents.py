@@ -202,15 +202,10 @@ def update_document(document_id: int, data: DocumentUpdate, background_tasks: Ba
         doc.content = _process_image_urls_in_content(data.content)
     if data.imageUrl is not None:
         doc.image_url = _process_image_url_to_path(data.imageUrl)
-    if data.newAuthorName:
-        doc.author_name = data.newAuthorName
-    if data.newAuthorId:
-        new_author = db.query(User).get(data.newAuthorId)
-        if new_author:
-            doc.author_id = new_author.id
-            doc.author_name = new_author.name
-        else:
-            raise HTTPException(404, "New author not found")
+    if doc.author_id != user.id:
+        doc.author_id = user.id
+        doc.author_name = user.name
+        
     doc.updated_at = datetime.now(timezone.utc)
 
     if data.reviewerId:
