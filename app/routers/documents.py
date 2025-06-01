@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi import File, UploadFile
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from typing import List, Optional
 from math import ceil
 from app.db.session import get_db
@@ -146,10 +146,16 @@ def list_documents(
     if view=='pending_my_review':
         query = query.filter(Document.reviewer_id==user.id, Document.status==ReviewStatus.pending_review)
     if searchTerm:
-       query = query.filter(
+        clean_content = func.regexp_replace(
+           Document.content,
+           r'!\[[^\]]*\]\([^\)]*\)',
+           '',
+           'g'
+        )
+        query = query.filter(
             or_(
                 Document.title.ilike(f"%{searchTerm}%"),
-                Document.content.ilike(f"%{searchTerm}%"),
+                clean_content.ilike(f"%{searchTerm}%"),
                 Document.author_name.ilike(f"%{searchTerm}%"),
                 Document.reviewer_name.ilike(f"%{searchTerm}%")           
             )
