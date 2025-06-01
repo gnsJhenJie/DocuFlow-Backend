@@ -146,7 +146,14 @@ def list_documents(
     if view=='pending_my_review':
         query = query.filter(Document.reviewer_id==user.id, Document.status==ReviewStatus.pending_review)
     if searchTerm:
-        query = query.filter(Document.title.ilike(f"%{searchTerm}%")|Document.content.ilike(f"%{searchTerm}%"))
+       query = query.filter(
+            or_(
+                Document.title.ilike(f"%{searchTerm}%"),
+                Document.content.ilike(f"%{searchTerm}%"),
+                Document.author_name.ilike(f"%{searchTerm}%"),
+                Document.reviewer_name.ilike(f"%{searchTerm}%")           
+            )
+       )
     # sorting
     if sortBy:
         field, order = sortBy.split('_')
