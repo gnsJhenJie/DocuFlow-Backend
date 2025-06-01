@@ -75,7 +75,6 @@ def create_document(data: DocumentCreate, background_tasks: BackgroundTasks,db: 
             doc_id=doc.id,
             frontend_url=settings.FRONTEND_URL,
         )
-
     return doc
 
 @router.get("", response_model=dict)
@@ -147,7 +146,14 @@ def list_documents(
     if view=='pending_my_review':
         query = query.filter(Document.reviewer_id==user.id, Document.status==ReviewStatus.pending_review)
     if searchTerm:
-        query = query.filter(Document.title.ilike(f"%{searchTerm}%")|Document.content.ilike(f"%{searchTerm}%"))
+       query = query.filter(
+            or_(
+                Document.title.ilike(f"%{searchTerm}%"),
+                Document.content.ilike(f"%{searchTerm}%"),
+                Document.author_name.ilike(f"%{searchTerm}%"),
+                Document.reviewer_name.ilike(f"%{searchTerm}%")           
+            )
+       )
     # sorting
     if sortBy:
         field, order = sortBy.split('_')
@@ -228,7 +234,8 @@ def update_document(document_id: int, data: DocumentUpdate, background_tasks: Ba
             doc_id=doc.id,
             frontend_url=settings.FRONTEND_URL,
         )
-
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 
@@ -262,6 +269,8 @@ def approve(document_id:int, db:Session=Depends(get_db), user=Depends(require_ro
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='approved', actor_id=user.id)
     db.add(hist); db.commit()
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 @router.post("/{document_id}/reject", response_model=DocumentRead)
@@ -273,6 +282,8 @@ def reject(document_id:int, payload:dict, db:Session=Depends(get_db), user=Depen
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='rejected', actor_id=user.id, details=reason)
     db.add(hist); db.commit()
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 @router.post("/{document_id}/reassign", response_model=DocumentRead)
@@ -284,6 +295,8 @@ def reassign(document_id:int, payload:dict, db:Session=Depends(get_db), user=Dep
     db.commit(); db.refresh(doc)
     hist=DocumentHistory(document_id=doc.id, action='reassigned', actor_id=user.id, details=str({'newReviewerId':new_id}))
     db.add(hist); db.commit()
+    doc.content = _sign_all_urls_in_content(doc.content) if doc.content else None
+    doc.image_url = generate_signed_url(doc.image_url, expire_in_seconds=600) if doc.image_url else None
     return doc
 
 # History endpoint
@@ -333,7 +346,7 @@ def _sign_all_urls_in_content(content: str) -> str:
     """
     Find all S3 image paths in the content and replace them with signed URLs.
     """
-    pattern = re.compile(r"\(images/[^)]+?\.png\)")
+    pattern = re.compile(r"\(images/[^)]+\)")
 
     matches = re.findall(pattern, content)
     for match in matches:
