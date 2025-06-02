@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from tests.conftest import db_add
+from tests.conftest import db_add_all
 from app.db.models import Role, User
 from app.db.session import get_db
 from app.routers.users import list_users, list_reviewers, update_role
@@ -15,14 +15,14 @@ def insert_users():
     for role, cnt in roles.items():
         for _ in range(cnt):
             idx = len(users) + 1
-            users.append(User(
+            user = User(
                 email=f"user{idx}@example.com", 
-                hashed_password="hashed_password",
+                hashed_password=f"hashed_password{idx}",
                 name=f"user{idx}",
                 role=role
-            ))
-    for user in users:
-        db_add(user)
+            )
+            users.append(user)
+    db_add_all(users)
     return users, roles
 
 

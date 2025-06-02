@@ -1,11 +1,11 @@
 import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from typing import Iterable
 
 import tempfile
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session
 
 # Ensure the test environment uses a SQLite in-memory database
 from app.core.config import settings
@@ -14,8 +14,7 @@ from app.core.config import settings
 settings.DATABASE_URL = "sqlite:///./tests/test.db"
 
 from app.db.base import Base
-from app.db.models import User
-from app.db.session import engine, SessionLocal
+from app.db.session import engine
 from app.main import app
 
 # Drop and recreate all tables before each test
@@ -30,10 +29,18 @@ def client():
         yield c
 
 def db_add(data):
-    with SessionLocal() as db:
-        db.add(data)
-        db.commit()
-        db.refresh(data)
+    with Session(engine) as session:
+        session.add(data)
+        session.commit()
+        session.refresh(data)
+
+def db_add_all(data: Iterable):
+    with Session(engine) as session:
+        for d in data:
+            session.add(d)
+        session.commit()
+        for d in data:
+            session.refresh(d)
 
 # tests/test_api.py
 
