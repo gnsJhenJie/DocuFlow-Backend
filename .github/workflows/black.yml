@@ -17,6 +17,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -26,14 +27,14 @@ jobs:
 
       - run: black .
 
-      - name: Create Formatting PR
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: apply Black auto-format"
-          title: "chore: apply Black auto-format"
-          branch: black-auto-format/${{ github.head_ref }}
-          base: main
-          body: |
-            This PR applies [Black](https://github.com/psf/black) formatting
-          delete-branch: true
+      - name: Commit formatting changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "chore: apply Black auto-format"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No formatting changes detected."
+          fi
