@@ -4,7 +4,7 @@ from tests.conftest import db_add, db_add_all
 from app.db.models import Document, Role, User
 from app.db.session import engine
 from app.schemas.document import DocumentCreate, DocumentUpdate, ReviewStatus
-from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
+from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reject, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
 
 def insert_documents(num=7):
     documents = []
@@ -240,6 +240,37 @@ def test_approve(mocker):
         db.query(Document).filter(Document.id == mock_dock.id).update({"reviewer_id": 0})
         try:
             approve(document_id=mock_dock.id, db=db, user=reviewer)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
+
+
+def test_reject(mocker):
+    mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+
+    reviewer = User(
+        id=1,
+        name="Test Reviewer",
+        email="reviewer@example.com",
+        hashed_password="hashed_password",
+        role=Role.reviewer
+    )
+    
+    documents = insert_documents()
+
+    mock_dock = documents[0]
+    payload = {"reason": "Reason for rejection"}
+
+    with Session(engine) as db:
+        db.query(Document).filter(Document.id == mock_dock.id).update({"reviewer_id": reviewer.id})
+
+        doc = reject(document_id=mock_dock.id, payload=payload, db=db, user=reviewer)
+        assert doc.status == ReviewStatus.rejected
+
+        db.query(Document).filter(Document.id == mock_dock.id).update({"reviewer_id": 0})
+        try:
+            reject(document_id=mock_dock.id, payload=payload, db=db, user=reviewer)
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 404
