@@ -1,7 +1,8 @@
+from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from tests.conftest import db_add, db_add_all
 from app.db.models import Document, Role, User
-from app.db.session import get_db
+from app.db.session import engine
 from app.schemas.document import DocumentCreate, DocumentUpdate, ReviewStatus
 from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
 
@@ -22,15 +23,15 @@ def insert_documents(num=7):
 def test_paginate():
     insert_documents()
     
-    db = next(get_db())
-    query = db.query(Document)
-    items, pages = paginate(query=query, page=1, limit=5)
-    assert len(items) == 5
-    assert pages == 2
+    with Session(engine) as db:
+        query = db.query(Document)
+        items, pages = paginate(query=query, page=1, limit=5)
+        assert len(items) == 5
+        assert pages == 2
 
-    items, pages = paginate(query=query, page=2, limit=5)
-    assert len(items) == 2
-    assert pages == 2
+        items, pages = paginate(query=query, page=2, limit=5)
+        assert len(items) == 2
+        assert pages == 2
 
 
 def test_create_document(mocker):
@@ -59,43 +60,42 @@ def test_create_document(mocker):
         action="submit_for_review",
     )
 
-    db = next(get_db())
-    doc = create_document(
-        data=mock_doc,
-        background_tasks=background_tasks,
-        db=db,
-        user=creator
-    )
-    assert doc.title == mock_doc.title
-    assert doc.content == mock_doc.content
-    assert doc.author_id == creator.id
-    assert doc.author_name == creator.name
-
-    try:
-        mock_doc.reviewerId = None
-        create_document(
-            data=mock_doc,
+    with Session(engine) as db:
+        doc = create_document( data=mock_doc,
             background_tasks=background_tasks,
             db=db,
             user=creator
         )
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 400
-        assert e.detail == "reviewerId required for submit"
+        assert doc.title == mock_doc.title
+        assert doc.content == mock_doc.content
+        assert doc.author_id == creator.id
+        assert doc.author_name == creator.name
 
-    try:
-        mock_doc.reviewerId = 3
-        create_document(
-            data=mock_doc,
-            background_tasks=background_tasks,
-            db=db,
-            user=creator
-        )
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 400
-        assert e.detail == "Invalid reviewer"
+        try:
+            mock_doc.reviewerId = None
+            create_document(
+                data=mock_doc,
+                background_tasks=background_tasks,
+                db=db,
+                user=creator
+            )
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert e.detail == "reviewerId required for submit"
+
+        try:
+            mock_doc.reviewerId = 3
+            create_document(
+                data=mock_doc,
+                background_tasks=background_tasks,
+                db=db,
+                user=creator
+            )
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 400
+            assert e.detail == "Invalid reviewer"
 
 
 def test_get_document(mocker):
@@ -117,24 +117,25 @@ def test_get_document(mocker):
         role=Role.viewer
     )
     documents = insert_documents()
-    db = next(get_db())
 
     mock_doc = documents[0]
-    doc = get_document(document_id=mock_doc.id, db=db, user=admin)
-    assert doc.title == mock_doc.title
-    assert doc.content == mock_doc.content
 
-    try:
-        doc = get_document(document_id=mock_doc.id, db=db, user=user)
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 403
-    
-    try:
-        get_document(document_id=0, db=db, user=admin)
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 404
+    with Session(engine) as db:
+        doc = get_document(document_id=mock_doc.id, db=db, user=admin)
+        assert doc.title == mock_doc.title
+        assert doc.content == mock_doc.content
+
+        try:
+            doc = get_document(document_id=mock_doc.id, db=db, user=user)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 403
+        
+        try:
+            get_document(document_id=0, db=db, user=admin)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
 
 
 def test_update_document(mocker):
@@ -158,7 +159,6 @@ def test_update_document(mocker):
         role=Role.viewer
     )
     documents = insert_documents()
-    db = next(get_db())
 
     mock_doc = documents[0]
     new_content = "Updated Content"
@@ -171,15 +171,17 @@ def test_update_document(mocker):
         newAuthorId=mock_doc.author_id,
         action="save_draft"
     )
-    doc = update_document(document_id=mock_doc.id, background_tasks=background_tasks, data=mock_doc_update, db=db, user=editor)
-    assert doc.title == mock_doc_update.title
-    assert doc.content == mock_doc_update.content
 
-    try:
-        update_document(document_id=mock_doc.id, background_tasks=background_tasks,  data=mock_doc_update, db=db, user=viewer)
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 403
+    with Session(engine) as db:
+        doc = update_document(document_id=mock_doc.id, background_tasks=background_tasks, data=mock_doc_update, db=db, user=editor)
+        assert doc.title == mock_doc_update.title
+        assert doc.content == mock_doc_update.content
+
+        try:
+            update_document(document_id=mock_doc.id, background_tasks=background_tasks,  data=mock_doc_update, db=db, user=viewer)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 403
 
 
 def test_delete_document():
@@ -198,15 +200,16 @@ def test_delete_document():
         role=Role.viewer
     )
     documents = insert_documents()
-    db = next(get_db())
 
     mock_doc = documents[0]
-    delete_document(document_id=mock_doc.id, db=db, user=admin)
-    doc = db.query(Document).get(mock_doc.id)
-    assert doc.status == ReviewStatus.deleted
 
-    try:
-        delete_document(document_id=0, db=db, user=viewer)
-        assert False, "Should raise HTTPException"
-    except HTTPException as e:
-        assert e.status_code == 404
+    with Session(engine) as db:
+        delete_document(document_id=mock_doc.id, db=db, user=admin)
+        doc = db.query(Document).get(mock_doc.id)
+        assert doc.status == ReviewStatus.deleted
+
+        try:
+            delete_document(document_id=0, db=db, user=viewer)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
