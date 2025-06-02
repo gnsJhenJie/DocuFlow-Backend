@@ -5,11 +5,13 @@ from app.db.base import Base
 from typing import Optional
 from datetime import datetime
 
+
 class Role(str, enum.Enum):
     viewer = "viewer"
     editor = "editor"
     reviewer = "reviewer"
     admin = "admin"
+
 
 class ReviewStatus(str, enum.Enum):
     draft = "draft"
@@ -17,6 +19,7 @@ class ReviewStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     deleted = "deleted"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -29,7 +32,9 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login = Column(DateTime(timezone=True), onupdate=func.now())
 
-    documents = relationship("Document", back_populates="author", foreign_keys="Document.author_id")
+    documents = relationship(
+        "Document", back_populates="author", foreign_keys="Document.author_id"
+    )
 
     # Pydantic schema expectations: camelCase props
     @property
@@ -39,6 +44,7 @@ class User(Base):
     @property
     def createdAt(self) -> datetime:
         return self.created_at
+
 
 class Document(Base):
     __tablename__ = "documents"
@@ -60,8 +66,15 @@ class Document(Base):
 
     rejection_reason = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -107,7 +120,8 @@ class Document(Base):
     @property
     def imageUrl(self) -> Optional[str]:
         return self.image_url
-    
+
+
 class DocumentHistory(Base):
     __tablename__ = "document_history"
 
