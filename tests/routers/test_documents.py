@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from tests.conftest import db_add, db_add_all
 from app.db.models import Document, Role, User
 from app.db.session import get_db
-from app.schemas.document import DocumentCreate, ReviewStatus
+from app.schemas.document import DocumentCreate, DocumentUpdate, ReviewStatus
 from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
 
 def insert_documents(num=7):
@@ -119,7 +119,7 @@ def test_get_document(mocker):
     documents = insert_documents()
     db = next(get_db())
 
-    mock_doc = documents[1]
+    mock_doc = documents[0]
     doc = get_document(document_id=mock_doc.id, db=db, user=admin)
     assert doc.title == mock_doc.title
     assert doc.content == mock_doc.content
@@ -132,6 +132,81 @@ def test_get_document(mocker):
     
     try:
         get_document(document_id=0, db=db, user=admin)
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 404
+
+
+def test_update_document(mocker):
+    background_tasks = mocker.Mock()
+    mock__process_image_url_to_path = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+
+    editor = User(
+        id=1,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.editor
+    )
+    viewer = User(
+        id=2,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.viewer
+    )
+    documents = insert_documents()
+    db = next(get_db())
+
+    mock_doc = documents[0]
+    new_content = "Updated Content"
+    mock_doc_update = DocumentUpdate(
+        title=mock_doc.title,
+        content=new_content,
+        imageUrl=mock_doc.imageUrl,
+        reviewerId=mock_doc.reviewerId,
+        newAuthorName=mock_doc.author_name,
+        newAuthorId=mock_doc.author_id,
+        action="save_draft"
+    )
+    doc = update_document(document_id=mock_doc.id, background_tasks=background_tasks, data=mock_doc_update, db=db, user=editor)
+    assert doc.title == mock_doc_update.title
+    assert doc.content == mock_doc_update.content
+
+    try:
+        update_document(document_id=mock_doc.id, background_tasks=background_tasks,  data=mock_doc_update, db=db, user=viewer)
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 403
+
+
+def test_delete_document():
+    admin = User(
+        id=1,
+        name="Test Admin",
+        email="admin@example.com",
+        hashed_password="hashed_password",
+        role=Role.admin
+    )
+    viewer = User(
+        id=2,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.viewer
+    )
+    documents = insert_documents()
+    db = next(get_db())
+
+    mock_doc = documents[0]
+    delete_document(document_id=mock_doc.id, db=db, user=admin)
+    doc = db.query(Document).get(mock_doc.id)
+    assert doc.status == ReviewStatus.deleted
+
+    try:
+        delete_document(document_id=0, db=db, user=viewer)
         assert False, "Should raise HTTPException"
     except HTTPException as e:
         assert e.status_code == 404
