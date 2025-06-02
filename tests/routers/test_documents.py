@@ -274,3 +274,38 @@ def test_reject(mocker):
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 404
+
+def test_reassign(mocker):
+    background_tasks = mocker.Mock()
+    mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+
+    editor = User(
+        id=1,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.editor
+    )
+    newReviewer = User(
+        id=2,
+        name="Test Reviewer",
+        email="reviewer@example.com",
+        hashed_password="hashed_password",
+        role=Role.reviewer
+    )
+    documents = insert_documents()
+
+    mock_dock = documents[0]
+    payload = {"newReviewerId": 2}
+
+    with Session(engine) as db:
+        db.add(newReviewer)
+        doc = reassign(document_id=mock_dock.id, payload=payload, background_tasks=background_tasks, db=db, user=editor)
+        assert doc.reviewer_id == payload["newReviewerId"]
+
+        try:
+            reassign(document_id=0, payload=payload, background_tasks=background_tasks, db=db, user=editor)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
