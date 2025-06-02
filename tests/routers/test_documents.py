@@ -213,3 +213,33 @@ def test_delete_document():
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 404
+
+
+def test_approve(mocker):
+    mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+
+    reviewer = User(
+        id=1,
+        name="Test Reviewer",
+        email="reviewer@example.com",
+        hashed_password="hashed_password",
+        role=Role.reviewer
+    )
+    
+    documents = insert_documents()
+
+    mock_dock = documents[0]
+
+    with Session(engine) as db:
+        db.query(Document).filter(Document.id == mock_dock.id).update({"reviewer_id": reviewer.id})
+
+        doc = approve(document_id=mock_dock.id, db=db, user=reviewer)
+        assert doc.status == ReviewStatus.approved
+
+        db.query(Document).filter(Document.id == mock_dock.id).update({"reviewer_id": 0})
+        try:
+            approve(document_id=mock_dock.id, db=db, user=reviewer)
+            assert False, "Should raise HTTPException"
+        except HTTPException as e:
+            assert e.status_code == 404
