@@ -96,3 +96,42 @@ def test_create_document(mocker):
     except HTTPException as e:
         assert e.status_code == 400
         assert e.detail == "Invalid reviewer"
+
+
+def test_get_document(mocker):
+    mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+
+    admin = User(
+        id=1,
+        name="Test Admin",
+        email="admin@example.com",
+        hashed_password="hashed_password",
+        role=Role.admin
+    )
+    user = User(
+        id=2,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.viewer
+    )
+    documents = insert_documents()
+    db = next(get_db())
+
+    mock_doc = documents[1]
+    doc = get_document(document_id=mock_doc.id, db=db, user=admin)
+    assert doc.title == mock_doc.title
+    assert doc.content == mock_doc.content
+
+    try:
+        doc = get_document(document_id=mock_doc.id, db=db, user=user)
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 403
+    
+    try:
+        get_document(document_id=0, db=db, user=admin)
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 404
