@@ -7,9 +7,6 @@ on:
       - 'tests/**'
   pull_request:
 
-environment:
-
-
 jobs:
   test:
     runs-on: ubuntu-latest
