@@ -31,3 +31,68 @@ def test_paginate():
     items, pages = paginate(query=query, page=2, limit=5)
     assert len(items) == 2
     assert pages == 2
+
+
+def test_create_document(mocker):
+    background_tasks = mocker.Mock()
+    reviewer = User(
+        id=1,
+        name="Test Reviewer",
+        email="reviewer@example.com",
+        hashed_password="hashed_password",
+        role=Role.reviewer
+    )
+    creator = User(
+        id=2,
+        name="Test User",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.editor
+    )
+    db_add(reviewer)
+
+    mock_doc = DocumentCreate(
+        title="Test Document",
+        content="Test Content",
+        imageUrl="https://example.com/image.jpg",
+        reviewerId=1,
+        action="submit_for_review",
+    )
+
+    db = next(get_db())
+    doc = create_document(
+        data=mock_doc,
+        background_tasks=background_tasks,
+        db=db,
+        user=creator
+    )
+    assert doc.title == mock_doc.title
+    assert doc.content == mock_doc.content
+    assert doc.author_id == creator.id
+    assert doc.author_name == creator.name
+
+    try:
+        mock_doc.reviewerId = None
+        create_document(
+            data=mock_doc,
+            background_tasks=background_tasks,
+            db=db,
+            user=creator
+        )
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert e.detail == "reviewerId required for submit"
+
+    try:
+        mock_doc.reviewerId = 3
+        create_document(
+            data=mock_doc,
+            background_tasks=background_tasks,
+            db=db,
+            user=creator
+        )
+        assert False, "Should raise HTTPException"
+    except HTTPException as e:
+        assert e.status_code == 400
+        assert e.detail == "Invalid reviewer"
