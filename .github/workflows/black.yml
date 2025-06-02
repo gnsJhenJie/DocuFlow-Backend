@@ -39,9 +39,7 @@ jobs:
           )
 
       - name: Create a new PR with formatted changes
-        if: |
-          # 只有在上一步確實有 commit 了格式化結果時才執行
-          steps.black_format.outcome == 'failure'
+        if: ${{ steps.black_format.outcome == 'failure' }}
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
