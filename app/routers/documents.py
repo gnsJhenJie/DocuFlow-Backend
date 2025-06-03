@@ -1,3 +1,4 @@
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi import File, UploadFile
 from sqlalchemy.orm import Session, joinedload
@@ -343,14 +344,11 @@ def _process_image_url_to_path(image_url: str|None) -> str|None:
     """
     if not image_url:
         return None
-    if image_url.startswith("https://"):
-        image_url = image_url.replace("https://", "")
-        # Get the path after the domain
-        if "/" in image_url:
-            image_url = image_url.split("/", 1)[1]
-        if "?" in image_url: # Remove query parameters if present
-            image_url = image_url.split("?")[0]
-    return image_url
+    parse = urlparse(image_url)
+    path = parse.path
+    if path.startswith("/"):
+        path = path[1:]
+    return path
 
 def _process_image_urls_in_content(content: str) -> str:
     """
