@@ -351,3 +351,19 @@ def test__process_image_urls_in_content(mocker):
     """
     processed_content = _process_image_urls_in_content(content)
     assert processed_content == new_content
+
+
+def test__sign_all_urls_in_content(mocker):
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda path, expire_in_seconds: "signed_url:" + path)
+
+    content = """
+        (images/image.jpg)
+        (images/dir/image.jpg)
+    """
+    new_content = """
+        (signed_url:images/image.jpg)
+        (signed_url:images/dir/image.jpg)
+    """
+    signed_content = _sign_all_urls_in_content(content)
+    print(signed_content)
+    assert signed_content == new_content
