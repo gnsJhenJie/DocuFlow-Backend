@@ -17,6 +17,9 @@ from app.db.base import Base
 from app.db.session import engine
 from app.main import app
 
+# Check pytest plugins
+pytest_plugins = ("pytest_mock",)
+
 # Drop and recreate all tables before each test
 @pytest.fixture(autouse=True)
 def reset_database():
