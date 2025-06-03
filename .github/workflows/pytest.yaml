@@ -36,7 +36,7 @@ jobs:
   
       - name: Check coverage threshold
         run: |
-          coverage report app/**/*.py --fail-under=60
+          coverage report --fail-under=60 app/**/*.py 
   
       - name: Upload coverage report artifact
         uses: actions/upload-artifact@v4
