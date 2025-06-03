@@ -333,3 +333,21 @@ def test__process_image_url_to_path():
     url = "http://example.com/dir/image.jpg"
     path = _process_image_url_to_path(url)
     assert path == "dir/image.jpg"
+
+
+def test__process_image_urls_in_content(mocker):
+    mock_settings_CLOUDFRONT_DOMAIN = mocker.patch("app.core.config.settings.CLOUDFRONT_DOMAIN", "https://example.com")
+    mock__process_image_url_to_path = mocker.patch("app.routers.documents._process_image_url_to_path", side_effect=lambda x: "new_path:" + x)
+
+    content = """
+        <img alt="" src="https://example.com/dir1/image1.jpg">
+        <br>
+        <img alt="" src="https://example.com/dir2/image2.jpg">
+    """
+    new_content = """
+        <img alt="" src="new_path:https://example.com/dir1/image1.jpg)">
+        <br>
+        <img alt="" src="new_path:https://example.com/dir2/image2.jpg)">
+    """
+    processed_content = _process_image_urls_in_content(content)
+    assert processed_content == new_content
