@@ -344,9 +344,11 @@ def _process_image_url_to_path(image_url: str|None) -> str|None:
     """
     if not image_url:
         return None
-    
     parse = urlparse(image_url)
-    return parse.path
+    path = parse.path
+    if path.startswith("/"):
+        path = path[1:]
+    return path
 
 def _process_image_urls_in_content(content: str) -> str:
     """
