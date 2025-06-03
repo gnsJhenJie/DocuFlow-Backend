@@ -6,14 +6,63 @@ from app.db.session import engine
 from app.schemas.document import DocumentCreate, DocumentUpdate, ReviewStatus
 from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reject, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
 
-def insert_documents(num=7):
+def get_users():
+    admin = User(
+        id=1,
+        name="user1",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.admin
+    )
+    editor = User(
+        id=2,
+        name="user2",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.editor
+    )
+    reviewer = User(
+        id=3,
+        name="user3",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.reviewer
+    )
+    viewer = User(
+        id=4,
+        name="user4",
+        email="test@example.com",
+        hashed_password="hashed_password",
+        role=Role.viewer
+    )
+    return {
+        "admin": admin,
+        "editor": editor,
+        "reviewer": reviewer,
+        "viewer": viewer
+    }
+
+def insert_documents(doc_param=None):
     documents = []
-    for i in range(num):
+    if doc_param is None:
+        doc_param = [
+            {"author_id": 2, "author_name": "user2", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.approved},
+            {"author_id": 1, "author_name": "user1", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.rejected},
+            {"author_id": 1, "author_name": "user1", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.deleted},
+            {"author_id": 1, "author_name": "user1", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.pending_review},
+            {"author_id": 2, "author_name": "user2", "reviewer_id": 1, "reviewer_name": "user1", "status": ReviewStatus.pending_review},
+            {"author_id": 1, "author_name": "user1", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.draft},
+            {"author_id": 2, "author_name": "user2", "reviewer_id": 3, "reviewer_name": "user3", "status": ReviewStatus.draft},
+        ]
+    for i, param in enumerate(doc_param):
         doc = Document(
             title=f"Document {i}",
             content=f"Content of document {i}",
-            author_id=1,
-            author_name="user1"
+            author_id=param["author_id"],
+            author_name=param["author_name"],
+            reviewer_id=param["reviewer_id"],
+            reviewer_name=param["reviewer_name"],
+            status=param["status"],
         )
         documents.append(doc)
     db_add_all(documents)
@@ -36,27 +85,16 @@ def test_paginate():
 
 def test_create_document(mocker):
     background_tasks = mocker.Mock()
-    reviewer = User(
-        id=1,
-        name="Test Reviewer",
-        email="reviewer@example.com",
-        hashed_password="hashed_password",
-        role=Role.reviewer
-    )
-    creator = User(
-        id=2,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.editor
-    )
-    db_add(reviewer)
 
+    users = get_users()
+    reviewer = users["reviewer"]
+    editor = users["editor"]
+    db_add(reviewer)
     mock_doc = DocumentCreate(
         title="Test Document",
         content="Test Content",
         imageUrl="https://example.com/image.jpg",
-        reviewerId=1,
+        reviewerId=reviewer.id,
         action="submit_for_review",
     )
 
@@ -64,12 +102,12 @@ def test_create_document(mocker):
         doc = create_document( data=mock_doc,
             background_tasks=background_tasks,
             db=db,
-            user=creator
+            user=editor
         )
         assert doc.title == mock_doc.title
         assert doc.content == mock_doc.content
-        assert doc.author_id == creator.id
-        assert doc.author_name == creator.name
+        assert doc.author_id == editor.id
+        assert doc.author_name == editor.name
 
         try:
             mock_doc.reviewerId = None
@@ -77,7 +115,7 @@ def test_create_document(mocker):
                 data=mock_doc,
                 background_tasks=background_tasks,
                 db=db,
-                user=creator
+                user=editor
             )
             assert False, "Should raise HTTPException"
         except HTTPException as e:
@@ -85,12 +123,12 @@ def test_create_document(mocker):
             assert e.detail == "reviewerId required for submit"
 
         try:
-            mock_doc.reviewerId = 3
+            mock_doc.reviewerId = 5
             create_document(
                 data=mock_doc,
                 background_tasks=background_tasks,
                 db=db,
-                user=creator
+                user=editor
             )
             assert False, "Should raise HTTPException"
         except HTTPException as e:
@@ -98,27 +136,49 @@ def test_create_document(mocker):
             assert e.detail == "Invalid reviewer"
 
 
+def test_list_documents(mocker):
+    mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
+    
+    documents = insert_documents()
+    users = get_users()
+
+    admin = users["admin"]
+    editor = users["editor"]
+    reviewer = users["reviewer"]
+    viewer = users["viewer"]
+    documents = [doc for doc in documents if doc.status != ReviewStatus.deleted]
+
+    with Session(engine) as db:
+        result = list_documents(page=1, limit=10, db=db, user=admin)
+        items = result["documents"]
+        assert len(items) == len(documents), f"There should be {len(documents)} documents"
+
+        result = list_documents(page=1, limit=10, db=db, user=editor)
+        items = result["documents"]
+        doc_len = sum( 1 if doc.status == ReviewStatus.approved or doc.author_id == editor.id else 0 for doc in documents)
+        assert len(items) == doc_len, f"There should be {doc_len} documents"
+
+        result = list_documents(page=1, limit=10, db=db, user=reviewer)
+        items = result["documents"]
+        doc_len = sum( 1 if doc.status == ReviewStatus.approved or doc.author_id == reviewer.id or (doc.status in [ReviewStatus.pending_review, ReviewStatus.rejected] and doc.reviewer_id == reviewer.id) else 0 for doc in documents)
+        assert len(items) == doc_len, f"There should be {doc_len} documents"
+
+        result = list_documents(page=1, limit=10, db=db, user=viewer)
+        items = result["documents"]
+        doc_len = sum( 1 if doc.status == ReviewStatus.approved else 0 for doc in documents)
+        assert len(items) == doc_len, f"There should be {doc_len} documents"
+
+
 def test_get_document(mocker):
     mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
     mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
 
-    admin = User(
-        id=1,
-        name="Test Admin",
-        email="admin@example.com",
-        hashed_password="hashed_password",
-        role=Role.admin
-    )
-    user = User(
-        id=2,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.viewer
-    )
+    users = get_users()
     documents = insert_documents()
 
-    mock_doc = documents[0]
+    admin = users["admin"]
+    viewer = users["viewer"]
+    mock_doc = documents[2]
 
     with Session(engine) as db:
         doc = get_document(document_id=mock_doc.id, db=db, user=admin)
@@ -126,7 +186,7 @@ def test_get_document(mocker):
         assert doc.content == mock_doc.content
 
         try:
-            doc = get_document(document_id=mock_doc.id, db=db, user=user)
+            doc = get_document(document_id=mock_doc.id, db=db, user=viewer)
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 403
@@ -144,21 +204,11 @@ def test_update_document(mocker):
     mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
     mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
 
-    editor = User(
-        id=1,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.editor
-    )
-    viewer = User(
-        id=2,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.viewer
-    )
+    users = get_users()
     documents = insert_documents()
+
+    editor = users["editor"]
+    viewer = users["viewer"]
 
     mock_doc = documents[0]
     new_content = "Updated Content"
@@ -185,21 +235,11 @@ def test_update_document(mocker):
 
 
 def test_delete_document():
-    admin = User(
-        id=1,
-        name="Test Admin",
-        email="admin@example.com",
-        hashed_password="hashed_password",
-        role=Role.admin
-    )
-    viewer = User(
-        id=2,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.viewer
-    )
+    users = get_users()
     documents = insert_documents()
+
+    admin = users["admin"]
+    viewer = users["viewer"]
 
     mock_doc = documents[0]
 
@@ -219,16 +259,11 @@ def test_approve(mocker):
     mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
     mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
 
-    reviewer = User(
-        id=1,
-        name="Test Reviewer",
-        email="reviewer@example.com",
-        hashed_password="hashed_password",
-        role=Role.reviewer
-    )
     
+    users = get_users()
     documents = insert_documents()
 
+    reviewer = users["reviewer"]
     mock_dock = documents[0]
 
     with Session(engine) as db:
@@ -249,16 +284,10 @@ def test_reject(mocker):
     mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
     mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
 
-    reviewer = User(
-        id=1,
-        name="Test Reviewer",
-        email="reviewer@example.com",
-        hashed_password="hashed_password",
-        role=Role.reviewer
-    )
-    
+    users = get_users()
     documents = insert_documents()
 
+    reviewer = users["reviewer"]
     mock_dock = documents[0]
     payload = {"reason": "Reason for rejection"}
 
@@ -280,24 +309,13 @@ def test_reassign(mocker):
     mock__sign_all_urls_in_content = mocker.patch("app.routers.documents._sign_all_urls_in_content", side_effect=lambda x: x)
     mock_generate_signed_url = mocker.patch("app.routers.documents.generate_signed_url", side_effect=lambda x: x)
 
-    editor = User(
-        id=1,
-        name="Test User",
-        email="test@example.com",
-        hashed_password="hashed_password",
-        role=Role.editor
-    )
-    newReviewer = User(
-        id=2,
-        name="Test Reviewer",
-        email="reviewer@example.com",
-        hashed_password="hashed_password",
-        role=Role.reviewer
-    )
+    users = get_users()
     documents = insert_documents()
 
+    editor = users["editor"]
+    newReviewer = users["admin"]
     mock_dock = documents[0]
-    payload = {"newReviewerId": 2}
+    payload = {"newReviewerId": newReviewer.id}
 
     with Session(engine) as db:
         db.add(newReviewer)
