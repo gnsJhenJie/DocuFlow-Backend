@@ -47,6 +47,7 @@ _HTML_TEMPLATE = """
 </html>
 """.strip()
 
+
 async def send_review_request_email(
     reviewer_email: str,
     reviewer_name: str,
@@ -72,23 +73,25 @@ async def send_review_request_email(
     )
 
     async with session.client(
-            "ses", 
-            region_name=AWS_REGION,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID or None,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY or None,
-        ) as ses:
+        "ses",
+        region_name=AWS_REGION,
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID or None,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY or None,
+    ) as ses:
         await ses.send_email(
             Source=SENDER,
             Destination={"ToAddresses": [reviewer_email]},
             Message={
-                "Subject": {"Charset": CHARSET, "Data": f'[DocuFlow] "{doc_title}" is awaiting your review'},
+                "Subject": {
+                    "Charset": CHARSET,
+                    "Data": f'[DocuFlow] "{doc_title}" is awaiting your review',
+                },
                 "Body": {
                     "Text": {"Charset": CHARSET, "Data": text_body},
                     "Html": {"Charset": CHARSET, "Data": html_body},
                 },
             },
         )
-
 
 
 def queue_review_email(

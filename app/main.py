@@ -9,7 +9,8 @@ app.add_middleware(ProxiedHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL,
+    allow_origins=[
+        settings.FRONTEND_URL,
         "http://localhost:3000",
         "https://localhost:3000",
         "http://localhost:9002",
@@ -22,9 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health", tags=["health"])
 async def health_check():
     return {"status": "ok"}
+
 
 app.include_router(auth)
 app.include_router(users)

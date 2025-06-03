@@ -1,0 +1,46 @@
+name: Python CI with coverage
+
+on:
+  push:
+    paths:
+      - '**.py'
+      - 'tests/**'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r test_requirements.txt
+        pip install pytest coverage
+
+    - name: Set environment variable for private key
+      run: echo "CLOUDFRONT_PRIVATE_KEY_BASE64=LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlDV3dJQkFBS0JnUUNCeTJhYVhkMkpQWld5Q1FDWjVRK2w5ZEdwdzN0Q2hvZHVRcVExT0pMaTJsREV0NXNrClNMa2lxZDNkaTAyTFM1bTNuY2REaFl2K0FzUGdZeThxR0xVYmZXT0lKQU41OXVHNUVjTFF5ejFVdTJyZTlra0wKcjJ0T1BLaWp1ZVV6VFJzMFNuaUF5ZUtWaEJYTExqRm5GbGpZVU9IaFFZeHpPbW5xTjU4eUg5VURkUUlEQVFBQgpBb0dBRFl2bEVZZHFiOEIxdHpjcFVPYVBVNHJzYndOd0FlbDRpUkY3Z2ZKOW9oK1cvbkVMU0NZdTdHYytPTGtwClJyaUZPcHpGQjA4UTVWbjBoNTdTZFZwT3pJR2RWYkdIeitjMW00aEV1dk5WRXJYODExdTllSUhkWnZSUk1PY28KaEE0TEQxN1dkRVNEbnBNb0phNStCeGhQbEVuV1Bab2w1Y1ExUGg3ejRhOEREYUVDUVFDOW9JWnZwaHBydkR0RgpvZElTczViS080Vkt1U2tSVjhidmY4UDhha0owTzBQMTFwZE5hSmVWaUdwcDF1TWY1UmxuS3FsbjQ0MHFLVDZnCmVaWWlpYmVmQWtFQXJ6bVoyWlhvdGxyNzdrQ2N6MHJ3SVJ1d0xlMGswQ2dvVW9zdnE4TDZ5Q1FBdWpjME9wd0MKZUFnYldvVnNFbGpzK0VyWjBiNTF0RGd6RVloa2ZVUThhd0pBTmpBeE9xYVUxa1NzQzNINnZpMWo0ZGF3ZUhJQgpNbHVMRmRYRkE5UzV1TTFXMW1IRVN2S2ducktrOWluYUxic2lUMEQ1dUI1bXNLMm9uK01lN0MrK3NRSkFhYkFiCmZPTHZselh2cUxmdUhSWDlHbXNoNjhHU3A3N2crMUNhYzBaS2p2Y3dQU0ZZN2xUMUpFTDNoTFRmQjMzOWlKRlYKS2k1dnZrRDdoSUs0NGRtTGV3SkFVeVdtQlFzL3lCQ0tJOTRaT09MaFIrWlRPeGs0eGc5TzNlUVo4QUd4OTlBRAowdzV4dnp2MWpVZnRYRUZPTlBiQjlONGpHQzJtL3hjRFFUQ1Y2MzJCSGc9PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQ==" >> $GITHUB_ENV
+
+    - name: Run tests with coverage
+      run: |
+        coverage run -m pytest tests
+        coverage report
+        coverage html
+
+    - name: Check coverage threshold
+      run: |
+        coverage report --fail-under=60
+
+    - name: Upload coverage report artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: html-coverage-report
+        path: htmlcov
