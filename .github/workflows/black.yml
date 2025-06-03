@@ -17,6 +17,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -24,16 +25,33 @@ jobs:
 
       - run: pip install black
 
-      - run: black .
+      - name: Run Black (check & format)
+        id: black_format
+        run: |
+          # 如果檢查失敗（exit code ≠ 0），就先格式化
+          black . --check || (
+            black . &&
+            git config user.name "github-actions[bot]" &&
+            git config user.email "github-actions[bot]@users.noreply.github.com" &&
+            git add . &&
+            git commit -m "chore: apply Black formatting" &&
+            git push origin HEAD:${{ github.head_ref }}
+          )
 
-      - name: Create Formatting PR
+      - name: Create a new PR with formatted changes
+        if: ${{ steps.black_format.outcome == 'failure' }}
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: apply Black auto-format"
-          title: "chore: apply Black auto-format"
-          branch: black-auto-format/${{ github.head_ref }}
-          base: main
+          # 用原 PR 的 source branch 當成 target base，或依照需求改用 base.ref
+          # github.event.pull_request.head.ref = PR 的 source branch 名稱
+          # github.event.pull_request.base.ref = PR 原本的目標 branch 名稱
+          # 這裡示範把格式化後的 PR 目標設為「原本 PR 的 base」
+          base: ${{ github.event.pull_request.base.ref }}
+          branch: black-formatting/${{ github.event.pull_request.head.ref }}
+          title: "[Auto] Apply Black formatting to ${{ github.event.pull_request.head.ref }}"
           body: |
-            This PR applies [Black](https://github.com/psf/black) formatting
-          delete-branch: true
+            這支 PR 會把分支 `${{ github.event.pull_request.head.ref }}` 的 `.py` 檔案套用 Black auto-format。
+            目標 base 為 `${{ github.event.pull_request.base.ref }}`。
+          commit-message: "chore: apply Black formatting"
+          create-draft: false

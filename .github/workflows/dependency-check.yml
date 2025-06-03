@@ -2,7 +2,7 @@ name: Python Dependency Audit (pip-audit)
 
 on:
   push:
-    branches: [ "main" ]  # 或你想要自動觸發的分支
+    branches: ['**'] 
 
 jobs:
   audit:
