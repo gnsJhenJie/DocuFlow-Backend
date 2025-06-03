@@ -5,22 +5,18 @@ from app.db.models import Role, User
 from app.db.session import engine
 from app.routers.users import list_users, list_reviewers, update_role
 
+
 def insert_users():
     users = []
-    roles = {
-        Role.admin: 1,
-        Role.editor: 2,
-        Role.reviewer: 3,
-        Role.viewer: 4
-    }
+    roles = {Role.admin: 1, Role.editor: 2, Role.reviewer: 3, Role.viewer: 4}
     for role, cnt in roles.items():
         for _ in range(cnt):
             idx = len(users) + 1
             user = User(
-                email=f"user{idx}@example.com", 
+                email=f"user{idx}@example.com",
                 hashed_password=f"hashed_password{idx}",
                 name=f"user{idx}",
-                role=role
+                role=role,
             )
             users.append(user)
     db_add_all(users)
@@ -38,7 +34,9 @@ def test_list_users():
             assert len(result) == cnt, f"There should be {cnt} users with role {role}"
             for user in result:
                 print(user.role)
-                assert user.role.value == role.value, f"{user.name} should have role {role.value}"
+                assert (
+                    user.role.value == role.value
+                ), f"{user.name} should have role {role.value}"
 
 
 def test_list_reviewers():
@@ -46,22 +44,33 @@ def test_list_reviewers():
 
     with Session(engine) as db:
         result = list_reviewers(db=db, current=users[0])
-        assert len(result) == roles[Role.reviewer] + roles[Role.admin], f"There should be {roles[Role.reviewer] + roles[Role.admin]} reviewers"
+        assert (
+            len(result) == roles[Role.reviewer] + roles[Role.admin]
+        ), f"There should be {roles[Role.reviewer] + roles[Role.admin]} reviewers"
         for user in result:
-            assert user.role.value == Role.reviewer.value or user.role.value == Role.admin.value, f"{user.name} should have role {Role.reviewer.value} or {Role.admin.value}"
+            assert (
+                user.role.value == Role.reviewer.value
+                or user.role.value == Role.admin.value
+            ), f"{user.name} should have role {Role.reviewer.value} or {Role.admin.value}"
 
 
 def test_update_role():
     users, _ = insert_users()
 
     user = users[1]
-    
+
     with Session(engine) as db:
-        result = update_role(user_id=user.id, payload={"role": Role.admin.value}, db=db, current=users[0])
-        assert result.role.value == Role.admin.value, f"{user.name} should have role {Role.admin.value}"
+        result = update_role(
+            user_id=user.id, payload={"role": Role.admin.value}, db=db, current=users[0]
+        )
+        assert (
+            result.role.value == Role.admin.value
+        ), f"{user.name} should have role {Role.admin.value}"
 
         try:
-            update_role(user_id=0, payload={"role": Role.admin.value}, db=db, current=users[0])
+            update_role(
+                user_id=0, payload={"role": Role.admin.value}, db=db, current=users[0]
+            )
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 404
