@@ -1,0 +1,29 @@
+name: Python Tes 
+
+on:
+  push:
+    branches: ['**'] 
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: szenius/set-timezone@v1.2
+        with:
+          timezoneLinux: "Asia/Taipei"
+        
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.11.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r test_requirements.txt
+      - name: Copy env
+        run: |
+          cp .env.test .env
+      - uses: pavelzw/pytest-action@v2
