@@ -2,7 +2,7 @@ from tests.conftest import db_add
 from app.db.models import User
 from app.core.security import get_password_hash
 
-def test_login_api(client):
+def test_login_and_me(client):
     name = "test_login"
     email = "test_login@example.com"
     password = "test_login_password"
@@ -10,6 +10,7 @@ def test_login_api(client):
     wrong_password = "wrong_password"
     role = "viewer"
     user = User(
+        id = 1,
         email = email,
         hashed_password = hash_password,
         name = name,
@@ -18,26 +19,30 @@ def test_login_api(client):
     db_add(user)
     
     data = {
-        "email": email,
-        "password": password,
-        "name": name,
-        "role": role
+        "username": email,
+        "password": wrong_password,
     }
-    response = client.post("/api/auth/login", json=data)
-    response_user = response.json()["user"]
-    print(response_user)
-    assert response.status_code == 200
-    assert response_user["email"] == email
-    assert response_user["name"] == name
-    assert response_user["role"] == role
-    assert "hashed_password" not in response_user
+    data_login_failed = client.post("/api/auth/login", data=data)
+    assert data_login_failed.status_code == 401
+    assert data_login_failed.json()["detail"] == "Invalid credentials"
 
     data = {
-        "email": email,
-        "password": wrong_password,
-        "name": name,
-        "role": role
+        "username": email,
+        "password": password,
     }
-    response = client.post("/api/auth/login", json=data)
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid credentials"
+    data_login = client.post("/api/auth/login", data=data)
+    user = data_login.json()["user"]
+    assert data_login.status_code == 200
+    assert user["email"] == email
+    assert user["name"] == name
+    assert user["role"] == role
+    assert "hashed_password" not in user
+    token = data_login.json()["token"]
+    assert token != ""
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    data_me = client.get("/api/auth/me", headers=headers)
+    print(data_me.json())
+    assert data_me.status_code == 200
+    me = data_me.json()
+    assert me["email"] == email
