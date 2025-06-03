@@ -10,39 +10,37 @@ import base64
 if settings.CLOUDFRONT_PRIVATE_KEY_BASE64:
     private_key = base64.b64decode(settings.CLOUDFRONT_PRIVATE_KEY_BASE64)
     if isinstance(private_key, str):
-        private_key = private_key.encode('utf-8')
+        private_key = private_key.encode("utf-8")
 else:
     if not os.path.exists(settings.CLOUDFRONT_PRIVATE_KEY_PATH):
-        raise FileNotFoundError(f"Private key file not found: {settings.CLOUDFRONT_PRIVATE_KEY_PATH}")
+        raise FileNotFoundError(
+            f"Private key file not found: {settings.CLOUDFRONT_PRIVATE_KEY_PATH}"
+        )
     with open(settings.CLOUDFRONT_PRIVATE_KEY_PATH, "rb") as key_file:
         private_key = key_file.read()
+
 
 def rsa_signer(message: bytes) -> bytes:
     # 使用 rsa 套件做 SHA1 簽章
     key = rsa.PrivateKey.load_pkcs1(private_key)
     return rsa.sign(message, key, "SHA-1")
 
+
 # 2) 初始化 CloudFrontSigner
 cf_signer = CloudFrontSigner(
-    key_id=settings.CLOUDFRONT_KEY_PAIR_ID,  # Key Pair ID
-    rsa_signer=rsa_signer
+    key_id=settings.CLOUDFRONT_KEY_PAIR_ID, rsa_signer=rsa_signer  # Key Pair ID
 )
 
-def generate_signed_url(
-    path: str,
-    expire_in_seconds: int = 3600
-) -> str:
+
+def generate_signed_url(path: str, expire_in_seconds: int = 3600) -> str:
     expire_time = datetime.now(timezone.utc) + timedelta(seconds=expire_in_seconds)
 
     if path and not path.startswith("/"):
         path = "/" + path
     path = unquote(path)
-    
+
     path = quote(path, safe="/")
 
     resource = f"{settings.CLOUDFRONT_DOMAIN}{path}"
-    
-    return cf_signer.generate_presigned_url(
-        resource,
-        date_less_than=expire_time
-    )
+
+    return cf_signer.generate_presigned_url(resource, date_less_than=expire_time)

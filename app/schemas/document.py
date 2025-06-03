@@ -3,14 +3,17 @@ from typing import Optional
 from app.db.models import ReviewStatus
 from datetime import datetime
 
+
 class DocumentBase(BaseModel):
     title: str
     content: str
     imageUrl: Optional[str]
 
+
 class DocumentCreate(DocumentBase):
     reviewerId: Optional[int]
     action: str  # 'save_draft' | 'submit_for_review'
+
 
 class DocumentRead(DocumentBase):
     id: int
@@ -25,8 +28,10 @@ class DocumentRead(DocumentBase):
     reviewedAt: Optional[datetime]
     rejectionReason: Optional[str]
     version: int
+
     class Config:
         orm_mode = True
+
 
 class DocumentUpdate(BaseModel):
     title: Optional[str]

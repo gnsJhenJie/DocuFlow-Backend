@@ -24,23 +24,15 @@ def test_login():
         role=role.value,
     )
     db_add(user)
-    
-    data = UserCreate(
-        email=email_str,
-        password=password,
-        name=name,
-        role=role
-    )
+
+    data = UserCreate(email=email_str, password=password, name=name, role=role)
     data_error = UserCreate(
-        email=email_str,
-        password=wrong_password,
-        name=name,
-        role=role
+        email=email_str, password=wrong_password, name=name, role=role
     )
 
     with Session(engine) as db:
         result = login(data=data, db=db)
-        assert result["user"].email == email    
+        assert result["user"].email == email
         assert result["user"].hashed_password == hash_password
         assert result["user"].name == name
         assert result["user"].role == role
