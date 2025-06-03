@@ -4,7 +4,7 @@ from tests.conftest import db_add, db_add_all
 from app.db.models import Document, Role, User
 from app.db.session import engine
 from app.schemas.document import DocumentCreate, DocumentUpdate, ReviewStatus
-from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reject, reassign, upload_endpoint, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
+from app.routers.documents import paginate, create_document, list_documents, get_document, update_document, delete_document, approve, reject, reassign, _process_image_url_to_path, _process_image_urls_in_content, _sign_all_urls_in_content
 
 def get_users():
     admin = User(
@@ -327,3 +327,9 @@ def test_reassign(mocker):
             assert False, "Should raise HTTPException"
         except HTTPException as e:
             assert e.status_code == 404
+
+
+def test__process_image_url_to_path():
+    url = "http://example.com/dir/image.jpg"
+    path = _process_image_url_to_path(url)
+    assert path == "dir/image.jpg"
