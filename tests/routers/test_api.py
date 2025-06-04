@@ -84,3 +84,67 @@ def test_user_roles_and_list(client):
     response = client.put(f"/api/users/{user.id}/role", json={"role": "reviewer"}, headers=headers)
     assert response.status_code == 200
     assert response.json()["role"] == "reviewer"
+
+
+def test_document_crud_and_workflow(client, mocker):
+    mocker.patch("app.routers.documents.queue_review_email", return_value=None)
+    editor, editor_password = register(
+        id=1,
+        email="editor@example.com",
+        password="editorpass",
+        role="editor"
+    )
+    admin, admin_password = register(
+        id=2,
+        email="admin@example.com",
+        password="adminpass",
+        role="admin"
+    )
+    reviewer, reviewer_password = register(
+        id=3,
+        email="reviewer@example.com",
+        password="reviewerpass",
+        role="reviewer"
+    )
+
+
+    editor_headers = get_headers(client, editor.email, editor_password)
+    # Create draft
+    response = client.post("/api/documents", json={
+        "title": "Doc1",
+        "content": "Content1",
+        "action": "save_draft"
+    }, headers=editor_headers)
+    assert response.status_code == 200
+    doc = response.json()
+    doc_id = doc["id"]
+    assert doc["status"] == "draft"
+
+    # Submit for review (assign to reviewer)
+    # First, ensure a reviewer exists
+    admin_headers = get_headers(client, admin.email, admin_password)
+    reviewers = client.get("/api/users/reviewers", headers=admin_headers).json()
+    
+    response = client.put(f"/api/documents/{doc_id}", json={
+        "action": "resubmit_for_review",
+        "reviewerId": reviewer.id
+    }, headers=editor_headers)
+    assert response.status_code == 200
+    submitted = response.json()
+    assert submitted["status"] == "pending_review"
+    assert submitted["reviewerId"] == reviewer.id
+
+    # Reviewer approves
+    # Login as reviewer
+    reviewer_headers = get_headers(client, reviewer.email, reviewer_password)
+    response = client.post(f"/api/documents/{doc_id}/approve", headers=reviewer_headers)
+    assert response.status_code == 200
+    approved = response.json()
+    assert approved["status"] == "approved"
+
+    # Check history
+    response = client.get(f"/api/documents/{doc_id}/history", headers=editor_headers)
+    assert response.status_code == 200
+    history = response.json()
+    actions = [h["action"] for h in history]
+    assert any(a == "approved" for a in actions)
