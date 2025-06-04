@@ -1,5 +1,7 @@
 from pydantic import BaseSettings
 import os
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GOOGLE_CLIENT_ID: str = ""

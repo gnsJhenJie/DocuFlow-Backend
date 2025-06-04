@@ -5,7 +5,13 @@ from app.schemas.user import UserCreate, UserRead
 from app.schemas.token import Token
 from app.db.session import get_db
 from app.db.models import User, Role
-from app.core.security import get_password_hash, verify_password, create_access_token, get_current_user
+from app.core.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    get_current_user,
+)
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 from app.core.config import settings
 import httpx
@@ -18,7 +24,9 @@ from google.auth.transport import requests as google_requests
 class OAuthCallbackRequest(BaseModel):
     code: str
 
+
 # --------------- Google OAuth ---------------
+
 
 @router.get("/google/url")
 def google_oauth_url():
@@ -46,7 +54,7 @@ def google_oauth_url():
     auth_url, _state = flow.authorization_url(
         access_type="online",
         include_granted_scopes="true",
-        prompt="consent"          # ← 想每次都重選帳號就保留；否則拿掉
+        prompt="consent",  # ← 想每次都重選帳號就保留；否則拿掉
     )
     return {"url": auth_url}
 
@@ -68,14 +76,20 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
 
     flow = Flow.from_client_config(
         client_config,
-        scopes=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
+        scopes=[
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ],
         redirect_uri=f"{settings.FRONTEND_URL}/auth/callback",
     )
 
     try:
         flow.fetch_token(code=code)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Google token exchange failed: {e}")
+        raise HTTPException(
+            status_code=400, detail=f"Google token exchange failed: {e}"
+        )
 
     creds = flow.credentials
     id_token_str = creds.id_token
@@ -107,7 +121,7 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
             name=name,
             hashed_password=get_password_hash(email + settings.JWT_SECRET_KEY),
             role=Role.viewer,
-            avatar_url=picture
+            avatar_url=picture,
         )
         db.add(user)
         db.commit()
@@ -144,17 +158,22 @@ async def google_callback(payload: OAuthCallbackRequest, db: Session = Depends(g
 #     token = create_access_token({"sub": user.id, "role": user.role.value})
 #     return {"token": token, "user": user}
 
+
 @router.post("/login", response_model=Token)
-def login(data: UserCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token({"sub": user.id, "role": user.role.value})
     return {"token": token, "user": user}
 
+
 @router.post("/logout")
 def logout():
     return {"message": "Logged out"}
+
 
 @router.get("/me", response_model=UserRead)
 def read_current_user(user: User = Depends(get_current_user)):

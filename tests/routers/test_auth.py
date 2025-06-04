@@ -24,9 +24,9 @@ def test_login():
         role=role.value,
     )
     db_add(user)
-    
-    data = UserCreate(
-        email=email_str,
+
+    data = OAuth2PasswordRequestForm(
+        username=email_str,
         password=password,
         name=name,
         role=role
@@ -39,8 +39,8 @@ def test_login():
     )
 
     with Session(engine) as db:
-        result = login(data=data, db=db)
-        assert result["user"].email == email    
+        result = login(form_data=data, db=db)
+        assert result["user"].email == email
         assert result["user"].hashed_password == hash_password
         assert result["user"].name == name
         assert result["user"].role == role
